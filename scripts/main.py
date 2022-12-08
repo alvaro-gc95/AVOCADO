@@ -1,0 +1,36 @@
+"""
+Main program to do automatic validation of meteorological data
+
+Contact: alvaro@intermet.es
+"""
+
+import utils
+import autoval
+import matplotlib.pyplot as plt
+
+# Variables to validate
+to_validate = ['TMPA', 'WSPD', 'RADS01']
+
+# Station to validate
+stat_val = 'PN001004'
+
+# Reference station
+stat_ref = 'PN001002'
+
+if __name__ == '__main__':
+
+    # Open all data from a station
+    observations = utils.open_observations('../data/' + stat_val + '/', to_validate)
+    # Reference station
+    reference_observations = utils.open_observations('../data/' + stat_ref + '/', to_validate)
+
+    # Validate
+    observations = observations.AutoVal.impossible_values(to_validate)
+    observations = observations.AutoVal.climatological_coherence(to_validate)
+    observations = observations.AutoVal.temporal_coherence(to_validate)
+    observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
+
+    # Plot the results
+    observations.AutoVal.vplot(kind='label_type')
+    observations.AutoVal.vplot(kind='label_count')
+    plt.show()
