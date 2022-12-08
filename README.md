@@ -46,7 +46,7 @@ import autoval.utils
 import autoval.validation_tests
 
 file_path = './data/station_name/'
-variables_to_validate = ['TMPA', 'WSDP', 'RADS01]
+variables_to_validate = ['TMPA', 'WSDP', 'RADS01']
 
 # Open all data from a station
 observations = autoval.utils.open_observations(file_path, variables_to_validate)
