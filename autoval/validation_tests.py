@@ -9,7 +9,7 @@ Contact: alvaro@intermet.es
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from climate import Climatology
+from autoval.climate import Climatology
 
 impossible_thresholds = {
     'TMPA': [-100, 100],

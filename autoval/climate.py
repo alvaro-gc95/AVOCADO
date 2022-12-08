@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-import utils
+import autoval.utils
 
 
 class Climatology:
@@ -82,8 +82,8 @@ class Climatology:
 
                 for variable in self._obj.columns:
                     # Clean DataFrames of possible conflictive values
-                    x = utils.clean_dataset(related_site_hm[variable].to_frame())
-                    y = utils.clean_dataset(hour_dataset[variable].to_frame())
+                    x = autoval.utils.clean_dataset(related_site_hm[variable].to_frame())
+                    y = autoval.utils.clean_dataset(hour_dataset[variable].to_frame())
 
                     # Get only the common data
                     common_idx = list(set(x.index).intersection(y.index))
