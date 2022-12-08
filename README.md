@@ -1,7 +1,7 @@
 # AutoVal
 AutoVal is a python pandas extension of automatic tests for meteorological data validation.
 
-# Dependencies
+## Dependencies
 This extension works in a python 3.8 environment and needs the following python libraries:
 - pandas
 - numpy
@@ -9,7 +9,7 @@ This extension works in a python 3.8 environment and needs the following python 
 - matplotlib
 - itertools
 
-# Data 
+## Data 
 The accepted meteorological variables are:
 
 | Variable  | Acronym |
@@ -32,23 +32,52 @@ In order to be read by AutoVal, the required format of the original files is the
 | 2000-01-01 01:00:00  | 13.4  |
 | ...  | ...  |
 
-# Impossible values
+
+## Validation Tests
+
+**Impossible values**
 ```
 import autoval.utils
 import autoval.validation_tests
 
+file_path = './data/station_name/
+variables_to_validate = ['TMPA', 'WSDP', 'RADS01]
 
 # Open all data from a station
-observations = autoval.utils.open_observations('./data/' + stat_val + '/', to_validate)
+observations = autoval.utils.open_observations(file_path, variables_to_validate)
 
 # Validate
-observations = observations.AutoVal.impossible_values(to_validate)`
+observations = observations.AutoVal.impossible_values(variables_to_validate)`
+```
 
+**Climatological coherence**
+```
+percentile_thresholds = [0.01, 0.99]
+
+# Validate
+observations = observations.AutoVal.climatological_coherence(variables_to_validate, percentile_thresholds)`
 ```
 
 
-- Impossible values: pd.DataFrame.AutoVal.impossible_values()
-- Climatological coherence: pd.DataFrame.AutoVal.climatological_coherence()
-- Temporal coherence: pd.DataFrame.AutoVal.temporal_coherence()
-- Spatial coherence: pd.DataFrame.AutoVal.spatial_coherence()
+**Temporal coherence**
 ```
+percentile_thresholds = [0.01, 0.99]
+
+# Validate
+observations = observations.AutoVal.temporal_coherence(variables_to_validate, percentile_thresholds)`
+```
+
+**Spatial coherence**
+```
+percentile_thresholds = [0.01, 0.99]
+
+file_path_reference = './data/reference_station_name/
+
+# Open data from a reference station
+observations = autoval.utils.open_observations(file_path_reference, variables_to_validate)
+
+# Validate
+observations = observations.AutoVal.climatological_coherence(reference_observations, variables_to_validate, percentile_thresholds)`
+```
+
+
