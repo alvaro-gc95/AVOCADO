@@ -6,12 +6,10 @@ Pandas extension to do automatic meteorological data validation
 Contact: alvaro@intermet.es
 """
 
-import os
-import itertools
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
+
+from climate import Climatology
 
 impossible_thresholds = {
     'TMPA': [-100, 100],
@@ -49,11 +47,19 @@ class AutoValidation:
 
         # Find the dates of the values above the upper impossible limit and below the lower impossible limit
         for variable in variables:
-            impossible_dates = self._obj.loc[(self._obj[variable] < impossible_thresholds[variable][0]) |
-                                             (self._obj[variable] > impossible_thresholds[variable][1])].index
-            # Mark with a "1" the dates of the impossible values, and with a "0" the dates of the possible values
-            self._obj[variable + '_IV'] = 0
-            self._obj.loc[impossible_dates, variable + '_IV'] = 1
+
+            self._obj[variable + '_' + str(impossible_thresholds[variable][0])] = impossible_thresholds[variable][0]
+            self._obj[variable + '_' + str(impossible_thresholds[variable][1])] = impossible_thresholds[variable][1]
+
+            self._obj = label_validation(
+                self._obj,
+                variables={variable: variable},
+                thresholds=impossible_thresholds[variable],
+                label='IV'
+            )
+
+            self._obj.drop([variable + '_' + str(impossible_thresholds[variable][0])], inplace=True, axis=1)
+            self._obj.drop([variable + '_' + str(impossible_thresholds[variable][1])], inplace=True, axis=1)
 
         return self._obj
 
@@ -70,13 +76,10 @@ class AutoValidation:
             percentiles = [0.01, 0.99]
 
         # Data to use to calculate the climatology
-        train_data = self._obj.copy()
-        ignore_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV']]
-        label_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC']]
         if skip_labels:
-            for col in ignore_columns:
-                train_data = train_data[train_data[col] != 1]
-        train_data.drop(label_columns, axis=1, inplace=True)
+            train_data = skip_label(self._obj, labels_to_skip=['IV'])
+        else:
+            train_data = skip_label(self._obj, labels_to_skip=[])
 
         # Climatology time series
         climatology = Climatology(train_data).daily_cycle(percentiles=percentiles, to_series=True)
@@ -84,13 +87,12 @@ class AutoValidation:
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        for variable in variables:
-            min_cond = self._obj[variable] < self._obj[variable + '_' + str(min(percentiles))]
-            max_cond = self._obj[variable] > self._obj[variable + '_' + str(max(percentiles))]
-            anomalous_dates = self._obj[variable].loc[min_cond | max_cond].index
-
-            self._obj[variable + '_CC'] = 0
-            self._obj.loc[anomalous_dates, variable + '_CC'] = 1
+        self._obj = label_validation(
+            self._obj,
+            variables=dict(zip(variables, variables)),
+            thresholds=percentiles,
+            label='CC'
+        )
 
         self._obj.drop(climatology.columns, axis=1, inplace=True)
 
@@ -108,30 +110,32 @@ class AutoValidation:
         if percentiles is None:
             percentiles = [0.01, 0.99]
 
+        # Get the variable delta for each time step
+        delta_data = self._obj[variables].diff()
+        delta_data.columns = [c + '_delta' for c in delta_data.columns]
+        self._obj = pd.concat([self._obj, delta_data], axis=1)
+
         # Data to use to calculate the climatology
-        train_data = self._obj.copy()
-        ignore_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV']]
-        label_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC']]
         if skip_labels:
-            for col in ignore_columns:
-                train_data = train_data[train_data[col] != 1]
-        train_data.drop(label_columns, axis=1, inplace=True)
+            train_data = skip_label(self._obj[delta_data.columns], labels_to_skip=['IV'])
+        else:
+            train_data = skip_label(self._obj[delta_data.columns], labels_to_skip=[])
 
         # Climatology time series
-        climatology = Climatology(train_data.diff()).daily_cycle(percentiles=percentiles, to_series=True)
+        climatology = Climatology(train_data).daily_cycle(percentiles=percentiles, to_series=True)
         self._obj = pd.concat([self._obj, climatology], axis=1)
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        for variable in variables:
-            min_cond = self._obj[variable].diff() < self._obj[variable + '_' + str(min(percentiles))]
-            max_cond = self._obj[variable].diff() > self._obj[variable + '_' + str(max(percentiles))]
-            anomalous_dates = self._obj[variable].loc[min_cond | max_cond].index
-
-            self._obj[variable + '_TC'] = 0
-            self._obj.loc[anomalous_dates, variable + '_TC'] = 1
+        self._obj = label_validation(
+            self._obj,
+            variables=dict(zip(sorted(delta_data.columns), sorted(variables))),
+            thresholds=percentiles,
+            label='TC'
+        )
 
         self._obj.drop(climatology.columns, axis=1, inplace=True)
+        self._obj.drop(delta_data.columns, axis=1, inplace=True)
 
         return self._obj
 
@@ -147,13 +151,10 @@ class AutoValidation:
             percentiles = [0.01, 0.99]
 
         # Data to use to calculate the climatology
-        train_data = self._obj.copy()
-        ignore_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV']]
-        label_columns = [c for c in self._obj.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC']]
         if skip_labels:
-            for col in ignore_columns:
-                train_data = train_data[train_data[col] != 1]
-        train_data.drop(label_columns, axis=1, inplace=True)
+            train_data = skip_label(self._obj, labels_to_skip=['IV'])
+        else:
+            train_data = skip_label(self._obj, labels_to_skip=[])
 
         spatial_correlation, residuals = Climatology(train_data).spatial_corr(related_site)
         residuals_climatology = Climatology(residuals.astype('float64')).daily_cycle(percentiles=percentiles,
@@ -245,159 +246,39 @@ class AutoValidation:
         return ax
 
 
-class Climatology:
-    def __init__(self, pandas_obj):
-        self._obj = pandas_obj
-
-    def daily_cycle(self, percentiles=None, to_series=False):
-        """
-        Calculate the percentiles of the monthly daily cycles
-        """
-        if percentiles is None:
-            percentiles = [0.1, 0.25, 0.5, 0.75, 0.9]
-
-        columns = [v + '_' + str(p) for v, p in itertools.product(self._obj.columns, percentiles)]
-        # Calculate the index of the monthly daily cycles (format = hour_month)
-        idx = [str(h) + '_' + str(m) for h, m in itertools.product(range(0, 24), range(1, 13))]
-
-        # Dataframe of climatological percentiles
-        climatology_percentiles = pd.DataFrame(index=idx, columns=columns)
-        climatology_series = pd.DataFrame(index=self._obj.index, columns=columns)
-
-        # Calculate the climatological daily cycle for each month for each percentile
-        for variable, percentile in itertools.product(self._obj.columns, percentiles):
-            for month, month_dataset in self._obj.groupby(self._obj.index.month):
-                print(month_dataset.dtypes)
-                monthly_climatology = month_dataset[variable].groupby(month_dataset.index.hour).quantile(percentile)
-                for hour in monthly_climatology.index:
-                    climatology_percentiles.loc[str(hour) + '_' + str(month), variable + '_' + str(percentile)] = \
-                        monthly_climatology.loc[hour]
-
-        # transform the monthly daily cycles to time series
-        if to_series:
-            for variable, percentile in itertools.product(self._obj.columns, percentiles):
-                for month, month_dataset in climatology_series.groupby(climatology_series.index.month):
-                    for hour, hourly_dataset in month_dataset.groupby(month_dataset.index.hour):
-                        climatology_series.loc[hourly_dataset.index, variable + '_' + str(percentile)] = \
-                            climatology_percentiles.loc[str(hour) + '_' + str(month), variable + '_' + str(percentile)]
-            return climatology_series
-        else:
-            return climatology_percentiles
-
-    def spatial_corr(self, related_site, percentiles=None):
-        """
-        Get the correlation and linear regression with a reference station
-        """
-        if percentiles is None:
-            percentiles = [0.1, 0.25, 0.5, 0.75, 0.9]
-
-        # Calculate the index of tha monthly daily cycles (format = hour_month)
-        idx = [str(h) + '_' + str(m) for h, m in itertools.product(range(0, 24), range(1, 13))]
-        columns = [v + '_' + lr for v, lr in itertools.product(self._obj.columns, ['coef', 'intercept', 'correlation'])]
-        # Dataframe of climatological percentiles
-        regression = pd.DataFrame(index=idx, columns=columns)
-        residuals = pd.DataFrame(index=self._obj.index, columns=[c + '_residuals' for c in self._obj.columns])
-
-        # Group the data by month
-        for month, month_dataset in self._obj.groupby(self._obj.index.month):
-            # Fill the dataframe with the climatological daily cycle of each month
-            for hour, hour_dataset in month_dataset.groupby(month_dataset.index.hour):
-
-                # Select the data of the reference station by month and hour
-                related_site_hm = related_site.loc[
-                    (related_site.index.month == month) &
-                    (related_site.index.hour == hour)]
-                hour_dataset = hour_dataset
-
-                # Correlate the datasets
-                correlation = related_site_hm.corrwith(hour_dataset)
-
-                for variable in self._obj.columns:
-                    # Clean DataFrames of possible conflictive values
-                    x = clean_dataset(related_site_hm[variable].to_frame())
-                    y = clean_dataset(hour_dataset[variable].to_frame())
-
-                    # Get only the common data
-                    common_idx = list(set(x.index).intersection(y.index))
-                    x = x.loc[common_idx]
-                    y = y.loc[common_idx]
-
-                    # Create object for the class
-                    linear_regressor = LinearRegression()
-                    # Perform linear regression
-                    linear_regressor.fit(x, y)
-                    regr_res = x - linear_regressor.predict(x)
-
-                    # Save the coefficient, intercept, and correlation for the hour and month
-                    regression.loc[str(hour) + '_' + str(month),
-                                   variable + '_coef'] = np.squeeze(linear_regressor.coef_)
-                    regression.loc[str(hour) + '_' + str(month),
-                                   variable + '_intercept'] = np.squeeze(linear_regressor.intercept_)
-                    regression.loc[str(hour) + '_' + str(month), variable + '_correlation'] = correlation[variable]
-
-                    residuals.loc[regr_res.index, variable + '_residuals'] = regr_res[variable].values
-
-        return regression, residuals
-
-
-def clean_dataset(df):
+def label_validation(df: pd.DataFrame, variables: dict, thresholds: (list, tuple), label: str):
     """
-    Delete conflictive values from dataset (NaN or inf)
-    :param df: DataFrame or Series.
-    :return df: DataFrame or Series. Cleaned vesion of original df.
+    Label a point if it is outside of a threshold gap.
+    :param df: DataFrame.
+    :param variables: dict. {labeling_variable: variable}.
+    :param thresholds: list or tuple. validation gap.
+    :param label: str. Name of the label.
+    :return df: DataFrame. Original dataframe with the validation column added.
     """
-    assert isinstance(df, pd.DataFrame), "df needs to be a pd.DataFrame"
-    df.dropna(inplace=True)
-    indices_to_keep = ~df.isin([np.nan, np.inf, -np.inf]).any(1)
-    return df[indices_to_keep].astype(np.float64)
+
+    for labeling_variable, variable in variables.items():
+
+        min_condition = df[labeling_variable] < df[labeling_variable + '_' + str(min(thresholds))]
+        max_condition = df[labeling_variable] > df[labeling_variable + '_' + str(max(thresholds))]
+
+        labeled_dates = df[variable].loc[min_condition | max_condition].index
+
+        df[variable + '_' + label] = 0
+        df.loc[labeled_dates, variable + '_' + label] = 1
+
+    return df
 
 
-def open_observations(path, variables):
-    # Declare an empty dataframe for the complete observations
-    data = pd.DataFrame()
-    # List of all the files in the directory of observations of the station
-    files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-    # Search the desired observed variable file through all the files in the directory
-    for file, variable in itertools.product(files, variables):
-        # Open if the file corresponds to the selected variable
-        if file.find(variable) != -1:
-            # Open the file
-            variable_data = pd.read_csv(path + file, index_col=0)
-            # Rename the values column
-            variable_data.columns.values[0] = variable
-            # Change the format of the index to datetime
-            variable_data.index = pd.to_datetime(variable_data.index)
-            # Add to the complete DataFrame
-            data = pd.concat([data, variable_data], axis=1)
-    # Check if the data exists
-    if data.empty:
-        print('Warning: Empty data. Files may not exist in ' + path)
-        exit()
-    else:
-        return data
+def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
+    """
+    Ignore data where the selected labels = 1.
+    """
+    columns_to_ignore = [c for c in df.columns if c.split('_')[-1] in labels_to_skip]
+    label_columns = [c for c in df.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC']]
 
+    for col in columns_to_ignore:
+        df = df[df[col] != 1]
 
-if __name__ == '__main__':
-    # Variables to validate
-    to_validate = ['TMPA', 'WSPD', 'RADS01']
+    df.drop(label_columns, axis=1, inplace=True)
 
-    # Station to validate
-    stat_val = 'PN001004'
-    # Reference station
-    stat_ref = 'PN001002'
-
-    # Open all data from a station
-    observations = open_observations('../data/' + stat_val + '/', to_validate)
-    # Reference station
-    reference_observations = open_observations('../data/' + stat_ref + '/', to_validate)
-
-    # Validate
-    observations = observations.AutoVal.impossible_values(to_validate)
-    observations = observations.AutoVal.climatological_coherence(to_validate)
-    observations = observations.AutoVal.temporal_coherence(to_validate)
-    observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
-
-    # Plot the results
-    observations.AutoVal.vplot(kind='label_type')
-    observations.AutoVal.vplot(kind='label_count')
-    plt.show()
+    return df

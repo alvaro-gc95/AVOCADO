@@ -6,6 +6,7 @@ import yaml
 import os
 import argparse
 import itertools
+import numpy as np
 import pandas as pd
 from datetime import datetime
 
@@ -28,7 +29,7 @@ class Configuration:
         return pd.date_range(start=self.DateIni, end=self.DateEnd, freq=freq)
 
     def make_inputs(self):
-        inputs = [None]*len(self.stations)*len(self.variables)
+        inputs = [None] * len(self.stations) * len(self.variables)
         for i, (station, variable) in enumerate(list(itertools.product(self.stations, self.variables))):
             inputs[i] = Inputs(station, self.reference, variable, self.DateIni, self.DateEnd)
         return inputs
@@ -82,53 +83,43 @@ def get_inputs():
     return parser.parse_args()
 
 
-def open_observations(path, variable, **kwargs):
+def open_observations(path: str, variables: list):
     """
-    Open the station observations of a selected variable. Get a particular time period is optional.
-    :param path: str. Path of the files.
-    :param variable: str. Acronym of the variable to get.
-    Optional:
-        - start: Datetime. Initial date.
-        - end: Datetime. Final date.
-        - freq: str. Frequency of the data.
-    :return data, var_file: DataFrame and list. The obtained observed data and the name of the files that contains it.
+    Get and rename all observational data from one directory as pandas DataFrame.
+    :param path: str. Path of the files to open.
+    :param variables: list. Acronyms as str of the variables to open.
     """
-    # Declare an empty dataframe for the observations
+    # Declare an empty dataframe for the complete observations
     data = pd.DataFrame()
     # List of all the files in the directory of observations of the station
     files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     # Search the desired observed variable file through all the files in the directory
-    for file in files:
+    for file, variable in itertools.product(files, variables):
         # Open if the file corresponds to the selected variable
         if file.find(variable) != -1:
             # Open the file
-            data = pd.read_csv(path + file, index_col=0)
-            data.columns.values[0] = 'value'
+            variable_data = pd.read_csv(path + file, index_col=0)
+            # Rename the values column
+            variable_data.columns.values[0] = variable
             # Change the format of the index to datetime
-            data.index = pd.to_datetime(data.index)
-            # As the desired variable has now been found, stop the loop
-            break
+            variable_data.index = pd.to_datetime(variable_data.index)
+            # Add to the complete DataFrame
+            data = pd.concat([data, variable_data], axis=1)
     # Check if the data exists
     if data.empty:
-        print('Warning: Empty data. A file for the variable ' + variable + ' may not exist in ' + path)
+        print('Warning: Empty data. Files may not exist in ' + path)
         exit()
-
-    # Get the data uin the selected period
-    if 'start' in kwargs.keys():
-        start = kwargs['start']
     else:
-        start = data.index[0]
+        return data
 
-    if 'end' in kwargs.keys():
-        end = kwargs['end']
-    else:
-        end = data.index[-1]
 
-    if 'freq' in kwargs.keys():
-        freq = kwargs['freq']
-    else:
-        freq = '1H'
-
-    data = data.reindex(pd.date_range(start=start, end=end, freq=freq))
-
-    return data, file
+def clean_dataset(df):
+    """
+    Delete conflictive values from dataset (NaN or inf)
+    :param df: DataFrame or Series.
+    :return df: DataFrame or Series. Cleaned vesion of original df.
+    """
+    assert isinstance(df, pd.DataFrame), "df needs to be a pd.DataFrame"
+    df.dropna(inplace=True)
+    indices_to_keep = ~df.isin([np.nan, np.inf, -np.inf]).any(1)
+    return df[indices_to_keep].astype(np.float64)
