@@ -5,7 +5,7 @@ Contact: alvaro@intermet.es
 """
 
 import autoval.validation_tests
-import autoval.utils
+import autoval.utils as utils
 import matplotlib.pyplot as plt
 
 # Variables to validate
@@ -20,9 +20,9 @@ stat_ref = 'PN001002'
 if __name__ == '__main__':
 
     # Open all data from a station
-    observations = autoval.utils.open_observations('./data/' + stat_val + '/', to_validate)
+    observations = utils.open_observations('./data/' + stat_val + '/', to_validate)
     # Reference station
-    reference_observations = autoval.utils.open_observations('./data/' + stat_ref + '/', to_validate)
+    reference_observations = utils.open_observations('./data/' + stat_ref + '/', to_validate)
 
     # Validate
     observations = observations.AutoVal.impossible_values(to_validate)

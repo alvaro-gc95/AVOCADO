@@ -30,12 +30,10 @@ class Climatology:
 
         # Dataframe of climatological percentiles
         climatology_percentiles = pd.DataFrame(index=idx, columns=columns)
-        climatology_series = pd.DataFrame(index=self._obj.index, columns=columns)
 
         # Calculate the climatological daily cycle for each month for each percentile
         for variable, percentile in itertools.product(self._obj.columns, percentiles):
             for month, month_dataset in self._obj.groupby(self._obj.index.month):
-                print(month_dataset.dtypes)
                 monthly_climatology = month_dataset[variable].groupby(month_dataset.index.hour).quantile(percentile)
                 for hour in monthly_climatology.index:
                     climatology_percentiles.loc[str(hour) + '_' + str(month), variable + '_' + str(percentile)] = \
@@ -43,16 +41,11 @@ class Climatology:
 
         # transform the monthly daily cycles to time series
         if to_series:
-            for variable, percentile in itertools.product(self._obj.columns, percentiles):
-                for month, month_dataset in climatology_series.groupby(climatology_series.index.month):
-                    for hour, hourly_dataset in month_dataset.groupby(month_dataset.index.hour):
-                        climatology_series.loc[hourly_dataset.index, variable + '_' + str(percentile)] = \
-                            climatology_percentiles.loc[str(hour) + '_' + str(month), variable + '_' + str(percentile)]
-            return climatology_series
+            return table_to_series(climatology_percentiles, self._obj.index)
         else:
             return climatology_percentiles
 
-    def spatial_corr(self, related_site, percentiles=None):
+    def spatial_regression(self, related_site, percentiles=None):
         """
         Get the correlation and linear regression with a reference station
         """
@@ -106,3 +99,18 @@ class Climatology:
                     residuals.loc[regr_res.index, variable + '_residuals'] = regr_res[variable].values
 
         return regression, residuals
+
+
+def table_to_series(df: pd.DataFrame, new_index):
+    """
+    Transform a table of hourly values per month to a time series.
+    """
+
+    climatology_series = pd.DataFrame(index=new_index, columns=df.columns)
+
+    for variable in df.columns:
+        for month, month_dataset in climatology_series.groupby(climatology_series.index.month):
+            for hour, hourly_dataset in month_dataset.groupby(month_dataset.index.hour):
+                climatology_series.loc[hourly_dataset.index, variable] = df.loc[str(hour) + '_' + str(month), variable]
+
+    return climatology_series

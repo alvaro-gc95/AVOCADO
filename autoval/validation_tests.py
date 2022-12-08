@@ -6,9 +6,11 @@ Pandas extension to do automatic meteorological data validation
 Contact: alvaro@intermet.es
 """
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import autoval.climate
 from autoval.climate import Climatology
 
 impossible_thresholds = {
@@ -146,6 +148,7 @@ class AutoValidation:
         # Variables to validate
         if variables is None:
             variables = self._variables
+
         # Climatological percentile threshold to label data as suspicious
         if percentiles is None:
             percentiles = [0.01, 0.99]
@@ -156,25 +159,26 @@ class AutoValidation:
         else:
             train_data = skip_label(self._obj, labels_to_skip=[])
 
-        spatial_correlation, residuals = Climatology(train_data).spatial_corr(related_site)
-        residuals_climatology = Climatology(residuals.astype('float64')).daily_cycle(percentiles=percentiles,
-                                                                                     to_series=True)
+        # Climatology of the regression residuals between observations and the reference data
+        residuals_climatology, residuals = get_significant_residuals(train_data, related_site, min_corr, percentiles)
         self._obj = pd.concat([self._obj, residuals.astype('float64'), residuals_climatology], axis=1)
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        for variable in variables:
-            min_cond = self._obj[variable + '_residuals'] < self._obj[variable + '_residuals_' + str(min(percentiles))]
-            max_cond = self._obj[variable + '_residuals'] > self._obj[variable + '_residuals_' + str(max(percentiles))]
-            anomalous_dates = self._obj[variable].loc[min_cond | max_cond].index
-
-            self._obj[variable + '_SC'] = 0
-            self._obj.loc[anomalous_dates, variable + '_SC'] = 1
+        self._obj = label_validation(
+            self._obj,
+            variables=dict(zip(sorted(residuals.columns), sorted(variables))),
+            thresholds=percentiles,
+            label='SC'
+        )
 
         self._obj.drop(residuals_climatology.columns, axis=1, inplace=True)
         self._obj.drop(residuals.columns, axis=1, inplace=True)
 
         return self._obj
+
+    def rime_alert(self):
+        pass
 
     def vplot(self, kind=None):
 
@@ -282,3 +286,21 @@ def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
     df.drop(label_columns, axis=1, inplace=True)
 
     return df
+
+
+def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, correlation_threshold, percentiles):
+
+    regression, residuals = Climatology(original).spatial_regression(reference)
+    regression_series = autoval.climate.table_to_series(regression, original.index)
+
+    correlation_columns = [c for c in regression_series.columns if 'correlation' in c]
+
+    for col in correlation_columns:
+        variable = col.split('_')[0]
+        non_significant_dates = regression_series[col].loc[regression_series[col] < correlation_threshold].index
+        residuals.loc[non_significant_dates, variable + '_residuals'] = np.nan
+
+    residuals_climatology = Climatology(residuals.astype('float64')).daily_cycle(percentiles=percentiles,
+                                                                                 to_series=True)
+
+    return residuals_climatology, residuals
