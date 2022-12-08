@@ -10,6 +10,20 @@ This extension works in a python 3.8 environment and needs the following python 
 - itertools
 
 # Data 
+The accepted meteorological variables are:
+
+| Variable  | Acronym |
+| ------------- | ------------- |
+| Temperature | TMPA |
+| Relative Humidity | RHMA |
+| Wind Speed | WSPD |
+| Wind Direction | WDIR |
+| Precipitation | PCNR |
+| Incoming Shortwave Radiation | RADS01 |
+| Outgoing Shortwave Radiation | RADS02 |
+| Incoming Longwave Radiation | RALD01 |
+| Outgoing Longwave Radiation | RADL02 |
+
 In order to be read by AutoVal, the required format of the original files is the following:
 
 | Date  | Data type |
