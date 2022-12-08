@@ -45,8 +45,8 @@ Label values too big or too small to be physically possible. The labels are adde
 import autoval.utils
 import autoval.validation_tests
 
-file_path = './data/station_name/
-variables_to_validate = ['TMPA', 'WSDP', 'RADS01]
+file_path = './data/station_name/'
+variables_to_validate = ['TMPA', 'WSDP', 'RADS01']
 
 # Open all data from a station
 observations = autoval.utils.open_observations(file_path, variables_to_validate)
@@ -85,7 +85,7 @@ It calculates the correlation and linear regression for each hour of each month 
 ```python
 percentile_thresholds = [0.01, 0.99]
 
-file_path_reference = './data/reference_station_name/
+file_path_reference = './data/reference_station_name/'
 
 # Open data from a reference station
 observations = autoval.utils.open_observations(file_path_reference, variables_to_validate)
