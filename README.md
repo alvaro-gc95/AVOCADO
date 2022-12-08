@@ -36,7 +36,7 @@ In order to be read by AutoVal, the required format of the original files is the
 ## Validation Tests
 
 **Impossible values**
-```
+```python
 import autoval.utils
 import autoval.validation_tests
 
@@ -51,7 +51,7 @@ observations = observations.AutoVal.impossible_values(variables_to_validate)`
 ```
 
 **Climatological coherence**
-```
+```python
 percentile_thresholds = [0.01, 0.99]
 
 # Validate
@@ -60,7 +60,7 @@ observations = observations.AutoVal.climatological_coherence(variables_to_valida
 
 
 **Temporal coherence**
-```
+```python
 percentile_thresholds = [0.01, 0.99]
 
 # Validate
@@ -68,7 +68,7 @@ observations = observations.AutoVal.temporal_coherence(variables_to_validate, pe
 ```
 
 **Spatial coherence**
-```
+```python
 percentile_thresholds = [0.01, 0.99]
 
 file_path_reference = './data/reference_station_name/
