@@ -12,7 +12,11 @@ This extension works in a python 3.8 environment and needs the following python 
 # Data 
 In order to be read by AutoVal, the required format of the original files is the following:
 ```
-Put here image of the file when possible
+| Date  | Data type |
+| ------------- | ------------- |
+| 2000-01-01 00:00:00  | 15.0  |
+| 2000-01-01 01:00:00  | 13.4  |
+| ...  | ...  |
 ```
 # Impossible values
 ```
