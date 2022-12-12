@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 import autoval.climate
 from autoval.climate import Climatology
+import autoval.statistics
 
 impossible_thresholds = {
     'TMPA': [-100, 100],
@@ -177,8 +178,11 @@ class AutoValidation:
 
         return self._obj
 
-    def rime_alert(self):
+    def variance_test(self):
         pass
+
+    def internal_coherence(self):
+        autoval.statistics.xPCA(self._obj).anomalies(kind='monthly')
 
     def vplot(self, kind=None):
 

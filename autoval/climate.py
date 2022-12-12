@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 import autoval.utils
+import autoval.statistics
 
 
 class Climatology:
@@ -45,12 +46,10 @@ class Climatology:
         else:
             return climatology_percentiles
 
-    def spatial_regression(self, related_site, percentiles=None):
+    def spatial_regression(self, related_site):
         """
         Get the correlation and linear regression with a reference station
         """
-        if percentiles is None:
-            percentiles = [0.1, 0.25, 0.5, 0.75, 0.9]
 
         # Calculate the index of tha monthly daily cycles (format = hour_month)
         idx = [str(h) + '_' + str(m) for h, m in itertools.product(range(0, 24), range(1, 13))]
@@ -67,27 +66,19 @@ class Climatology:
                 # Select the data of the reference station by month and hour
                 related_site_hm = related_site.loc[
                     (related_site.index.month == month) &
-                    (related_site.index.hour == hour)]
+                    (related_site.index.hour == hour)
+                ]
                 hour_dataset = hour_dataset
 
                 # Correlate the datasets
                 correlation = related_site_hm.corrwith(hour_dataset)
 
                 for variable in self._obj.columns:
-                    # Clean DataFrames of possible conflictive values
-                    x = autoval.utils.clean_dataset(related_site_hm[variable].to_frame())
-                    y = autoval.utils.clean_dataset(hour_dataset[variable].to_frame())
 
-                    # Get only the common data
-                    common_idx = list(set(x.index).intersection(y.index))
-                    x = x.loc[common_idx]
-                    y = y.loc[common_idx]
-
-                    # Create object for the class
-                    linear_regressor = LinearRegression()
-                    # Perform linear regression
-                    linear_regressor.fit(x, y)
-                    regr_res = x - linear_regressor.predict(x)
+                    linear_regressor, regr_res = autoval.statistics.linear_regression(
+                        x=related_site_hm[variable].to_frame(),
+                        y=hour_dataset[variable].to_frame()
+                    )
 
                     # Save the coefficient, intercept, and correlation for the hour and month
                     regression.loc[str(hour) + '_' + str(month),

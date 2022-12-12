@@ -29,6 +29,7 @@ if __name__ == '__main__':
     observations = observations.AutoVal.climatological_coherence(to_validate)
     observations = observations.AutoVal.temporal_coherence(to_validate)
     observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
+    # observations = observations.AutoVal.internal_coherence()
 
     # Plot the results
     observations.AutoVal.vplot(kind='label_type')
