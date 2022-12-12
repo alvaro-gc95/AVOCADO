@@ -35,6 +35,17 @@ class xPCA:
         elif kind == 'custom':
             mean = self.data.resample('M').mean()
 
+        return anomalies
+
+    def calculate(self, kind):
+
+        if kind == 'T':
+            pass
+        elif kind == 'S':
+            pass
+        else:
+            pass
+
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
     # Clean DataFrames of possible conflictive values
