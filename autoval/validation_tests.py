@@ -182,7 +182,8 @@ class AutoValidation:
         pass
 
     def internal_coherence(self):
-        autoval.statistics.xPCA(self._obj).anomalies(kind='monthly')
+        for month, monthly_df in self._obj.groupby(self._obj.index.month):
+            autoval.statistics.DaskPCA(monthly_df, n_components=4).calculate(mode='T')
 
     def vplot(self, kind=None):
 

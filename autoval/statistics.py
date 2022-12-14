@@ -5,46 +5,75 @@
 import itertools
 
 import numpy as np
+import xarray as xr
+import gc
+import dask.array as da
+import dask.dataframe as dd
+from dask_ml.decomposition import PCA
 import pandas as pd
 from sklearn.linear_model import LinearRegression
-from sklearn.decomposition import PCA
 
 import autoval.utils
 
 
-class xPCA:
-    def __init__(self, data):
-        self.data = data
+class DaskPCA:
+    def __init__(self, data, n_components):
+        self.data = self.from_pandas_to_daskarray(data, npartitions=3)
+        self.n_components = n_components
+        self.anomalies()
 
-    def anomalies(self, kind, *months):
+    @staticmethod
+    def from_pandas_to_daskarray(df: pd.DataFrame, npartitions):
+        df = autoval.utils.clean_dataset(df)
+        df = dd.from_pandas(df, npartitions=npartitions).to_dask_array()
+        return df
 
-        anomalies = pd.DataFrame(index=self.data.index, columns=[c + '_anomaly' for c in self.data.columns])
+    def anomalies(self, standardize=False):
+        """
+        Calculate anomalies of the field.
+        :param standardize: bool, optional. (Default=False). If True standardize of the anomalies.
+        """
 
-        if kind == 'monthly':
-            for month, monthly_df in self.data.groupby(self.data.index.month):
-                monthly_mean = monthly_df.mean()
-                anomaly = monthly_df - monthly_mean
-                anomalies.loc[anomaly.index] = anomaly
+        mean = self.data.mean()
 
-        elif kind == 'seasonal':
-            mean = self.data.resample('M').mean()
+        if standardize:
+            std = self.data.std()
+            anomaly = (self.data - mean)/std
 
-        elif kind == 'total':
-            mean = self.data.mean()
+        else:
+            anomaly = self.data - mean
 
-        elif kind == 'custom':
-            mean = self.data.resample('M').mean()
+        return anomaly
 
-        return anomalies
+    def calculate(self, mode):
+        print(self.anomalies(standardize=True))
 
-    def calculate(self, kind):
+        # Get Dask array of anomalies
+        z = self.anomalies(standardize=True)
+        print(z)
+        # z = dd.from_pandas(autoval.utils.clean_dataset(self.anomalies(standardize=True)), npartitions=3).to_dask_array()
 
-        if kind == 'T':
-            pass
-        elif kind == 'S':
+        if mode == 'T':
+            z = z.transpose()
+        elif mode == 'S':
             pass
         else:
-            pass
+            raise AttributeError(' Error: ' + mode + ' is not a PCA type')
+
+        # Covariance matrix
+        s = da.cov(z.compute_chunk_sizes())
+
+        # Get principal components
+        pca = PCA(n_components=self.n_components)
+        pca.fit(s)
+
+        # Clear some memory
+        del z, s
+        gc.collect()
+        print(pca.components_.shape)
+        print([r * 100 for r in pca.explained_variance_ratio_])
+
+
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
