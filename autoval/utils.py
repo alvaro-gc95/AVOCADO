@@ -23,14 +23,18 @@ class Preprocess:
         if not (set(obj.columns) & set(variables_to_check)):
             raise AttributeError("Must have " + ', '.join(variables_to_check))
 
-    def wind_components(self):
+    def wind_components(self, substitute=False):
         """
         Transform wind speed amd direction to components U and V
+        :param substitute: bool (default=False). If True substitute the WDIR and WSPD values for U and V.
         """
         self._check_variable_in_obj(self._obj, ['WSPD', 'WDIR'])
 
         self._obj['U'] = self._obj['WSPD'] * np.deg2rad(270 - self._obj['WDIR']).apply(np.cos)
         self._obj['V'] = self._obj['WSPD'] * np.deg2rad(270 - self._obj['WDIR']).apply(np.sin)
+
+        if substitute:
+            self._obj.drop(['WSPD', 'WDIR'], axis=1, inplace=True)
 
     def clear_low_radiance(self, rad_thr=200):
         """

@@ -183,7 +183,7 @@ class AutoValidation:
 
     def internal_coherence(self):
         for month, monthly_df in self._obj.groupby(self._obj.index.month):
-            autoval.statistics.DaskPCA(monthly_df, n_components=4).calculate(mode='T')
+            autoval.statistics.DaskPCA(monthly_df, n_components=3, standardize=True).calculate(mode='T')
 
     def vplot(self, kind=None):
 

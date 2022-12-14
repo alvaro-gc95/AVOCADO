@@ -17,16 +17,18 @@ import autoval.utils
 
 
 class DaskPCA:
-    def __init__(self, data, n_components):
-        self.data = self.from_pandas_to_daskarray(data, npartitions=3)
+    def __init__(self, data, n_components, standardize=False):
+        self.data = data
         self.n_components = n_components
-        self.anomalies()
+        self.anomaly = self.anomalies(standardize=standardize)
 
     @staticmethod
     def from_pandas_to_daskarray(df: pd.DataFrame, npartitions):
         df = autoval.utils.clean_dataset(df)
-        df = dd.from_pandas(df, npartitions=npartitions).to_dask_array()
-        return df
+        daskarr = dd.from_pandas(df, npartitions=npartitions).to_dask_array()
+        daskarr = daskarr.compute_chunk_sizes()
+
+        return daskarr
 
     def anomalies(self, standardize=False):
         """
@@ -38,7 +40,7 @@ class DaskPCA:
 
         if standardize:
             std = self.data.std()
-            anomaly = (self.data - mean)/std
+            anomaly = (self.data - mean) / std
 
         else:
             anomaly = self.data - mean
@@ -46,13 +48,11 @@ class DaskPCA:
         return anomaly
 
     def calculate(self, mode):
-        print(self.anomalies(standardize=True))
 
         # Get Dask array of anomalies
-        z = self.anomalies(standardize=True)
-        print(z)
-        # z = dd.from_pandas(autoval.utils.clean_dataset(self.anomalies(standardize=True)), npartitions=3).to_dask_array()
+        z = self.from_pandas_to_daskarray(self.anomaly, npartitions=3)
 
+        # PCA mode
         if mode == 'T':
             z = z.transpose()
         elif mode == 'S':
@@ -61,19 +61,22 @@ class DaskPCA:
             raise AttributeError(' Error: ' + mode + ' is not a PCA type')
 
         # Covariance matrix
-        s = da.cov(z.compute_chunk_sizes())
+        s = da.cov(z)
 
         # Get principal components
         pca = PCA(n_components=self.n_components)
         pca.fit(s)
 
+        pc = z.dot(pca.components_)
         # Clear some memory
         del z, s
         gc.collect()
-        print(pca.components_.shape)
+
+        print(pc)
+        print(pca.components_)
         print([r * 100 for r in pca.explained_variance_ratio_])
 
-
+        return pca
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):

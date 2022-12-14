@@ -24,9 +24,9 @@ if __name__ == '__main__':
     # Reference station
     reference_observations = utils.open_observations('./data/' + stat_ref + '/', to_validate)
 
-    print(observations)
-    utils.Preprocess(observations).wind_components()
-    print(observations)
+    utils.Preprocess(observations).wind_components(substitute=True)
+    # utils.Preprocess(observations).clear_low_radiance()
+
     # Validate
     # observations = observations.AutoVal.impossible_values(to_validate)
     # observations = observations.AutoVal.climatological_coherence(to_validate)

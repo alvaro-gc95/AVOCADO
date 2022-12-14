@@ -91,6 +91,9 @@ class Climatology:
 
         return regression, residuals
 
+    def mcp(self):
+        pass
+
 
 def table_to_series(df: pd.DataFrame, new_index):
     """
