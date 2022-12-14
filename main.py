@@ -9,13 +9,13 @@ import autoval.utils as utils
 import matplotlib.pyplot as plt
 
 # Variables to validate
-to_validate = ['TMPA', 'WSPD', 'RADS01']
+to_validate = ['TMPA', 'WSPD', 'WDIR', 'RADS01']
 
 # Station to validate
-stat_val = 'PN001004'
+stat_val = 'PN001002'
 
 # Reference station
-stat_ref = 'PN001002'
+stat_ref = 'PN001004'
 
 if __name__ == '__main__':
 
@@ -24,14 +24,17 @@ if __name__ == '__main__':
     # Reference station
     reference_observations = utils.open_observations('./data/' + stat_ref + '/', to_validate)
 
+    print(observations)
+    utils.Preprocess(observations).wind_components()
+    print(observations)
     # Validate
-    observations = observations.AutoVal.impossible_values(to_validate)
-    observations = observations.AutoVal.climatological_coherence(to_validate)
-    observations = observations.AutoVal.temporal_coherence(to_validate)
-    observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
-    # observations = observations.AutoVal.internal_coherence()
+    # observations = observations.AutoVal.impossible_values(to_validate)
+    # observations = observations.AutoVal.climatological_coherence(to_validate)
+    # observations = observations.AutoVal.temporal_coherence(to_validate)
+    # observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
+    observations = observations.AutoVal.internal_coherence()
 
     # Plot the results
-    observations.AutoVal.vplot(kind='label_type')
-    observations.AutoVal.vplot(kind='label_count')
-    plt.show()
+    # observations.AutoVal.vplot(kind='label_type')
+    # observations.AutoVal.vplot(kind='label_count')
+    # plt.show()

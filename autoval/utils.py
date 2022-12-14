@@ -1,5 +1,7 @@
 """
+Utils for AutoVal objects
 
+Contact: alvaro@intermet.es
 """
 
 import yaml
@@ -9,6 +11,34 @@ import itertools
 import numpy as np
 import pandas as pd
 from datetime import datetime
+
+
+class Preprocess:
+    def __init__(self, pandas_obj):
+        self._obj = pandas_obj
+
+    @staticmethod
+    def _check_variable_in_obj(obj, variables_to_check):
+        # Verify there is a column with the selected meteorological variable
+        if not (set(obj.columns) & set(variables_to_check)):
+            raise AttributeError("Must have " + ', '.join(variables_to_check))
+
+    def wind_components(self):
+        """
+        Transform wind speed amd direction to components U and V
+        """
+        self._check_variable_in_obj(self._obj, ['WSPD', 'WDIR'])
+
+        self._obj['U'] = self._obj['WSPD'] * np.deg2rad(270 - self._obj['WDIR']).apply(np.cos)
+        self._obj['V'] = self._obj['WSPD'] * np.deg2rad(270 - self._obj['WDIR']).apply(np.sin)
+
+    def clear_low_radiance(self, rad_thr=200):
+        """
+        Delete Shortwave incoming radiance below the "night" threshold
+        """
+        self._check_variable_in_obj(self._obj, ['RADS01'])
+
+        self._obj['RADS01'] = self._obj['RADS01'].where(self._obj['RADS01'] >= rad_thr, np.nan)
 
 
 class Configuration:
