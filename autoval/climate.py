@@ -18,6 +18,39 @@ class Climatology:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
+    def climatological_variables(self):
+        """
+        Get relevant daily climatological variables as DataFrame: Maximum, minimum and mean temperature, maximum and
+        mean wind velocity, total solar radiation, total precipitation.
+        """
+
+        daily_variables = pd.DataFrame()
+
+        if 'TMPA' in self._obj.columns:
+            tmax = self._obj['TMPA'].resample('D').max().rename('TMAX')
+            tmin = self._obj['TMPA'].resample('D').min().rename('TMIN')
+            tmean = self._obj['TMPA'].resample('D').mean().rename('TMEAN')
+            daily_variables = pd.concat([daily_variables, tmax, tmin, tmean], axis=1)
+
+        if 'WSPD' in self._obj.columns:
+            vmax = self._obj['WSPD'].resample('D').max().rename('VMAX')
+            vmean = self._obj['WSPD'].resample('D').mean().rename('VMEAN')
+            daily_variables = pd.concat([daily_variables, vmax, vmean], axis=1)
+
+        if 'RADS01' in self._obj.columns:
+            autoval.utils.Preprocess(self._obj).clear_low_radiance()
+            rads_total = self._obj['RADS01'].resample('D').sum().rename('RADST')
+            rads_total = rads_total.where(rads_total > 0, np.nan)
+            daily_variables = pd.concat([daily_variables, rads_total], axis=1)
+
+        if 'PCNR' in self._obj.columns:
+            ptot = self._obj['PCNR'].resample('D').sum().rename('PTOT')
+            daily_variables = pd.concat([daily_variables, ptot], axis=1)
+
+        daily_variables.index = pd.to_datetime(daily_variables.index)
+
+        return daily_variables
+
     def daily_cycle(self, percentiles=None, to_series=False):
         """
         Calculate the percentiles of the monthly daily cycles
