@@ -182,8 +182,56 @@ class AutoValidation:
         pass
 
     def internal_coherence(self):
-        for month, monthly_df in self._obj.groupby(self._obj.index.month):
-            autoval.statistics.DaskPCA(monthly_df, n_components=3, standardize=True).calculate(mode='T')
+
+        daily_df = Climatology(self._obj).climatological_variables()
+
+        ncols = 3
+        nrows = 4
+        fig = plt.figure()
+        ax = fig.subplots(nrows, ncols)
+
+        regression = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
+        regression_error = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
+        anomaly = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
+
+
+        for month, monthly_df in daily_df.groupby(daily_df.index.month):
+
+            pca = autoval.statistics.DaskPCA(monthly_df, n_components=3, mode='T', standardize=True)
+
+            regression_month, regression_error_month = pca.regression()
+
+            i = int(np.floor((month-1)/3))
+            j = int((month-1) - 3*i)
+
+            pca.eof.plot.bar(ax=ax[i, j])
+            ax[i, j].set_ylim(-1, 1)
+
+            regression.loc[regression_month.index] = regression_month
+            anomaly.loc[pca.anomaly.index] = pca.anomaly
+            regression_error.loc[regression_error_month.index] = regression_error
+
+        fig.subplots_adjust(wspace=0, hspace=0)
+        plt.show()
+        regression.plot()
+        plt.show()
+
+        fig = plt.figure()
+        ax = fig.subplots(len(daily_df.columns))
+
+        regression_error = anomaly - regression
+        print(regression_error)
+        fig2 = plt.figure()
+        ax2 = fig2.subplots(len(daily_df.columns))
+        for i, variable in enumerate(daily_df.columns):
+            anomaly[variable].plot(ax=ax[i], color='black')
+            regression[variable].plot(ax=ax[i])
+
+            regression_error[variable].hist(ax=ax2[i], bins=20)
+        plt.show()
+
+
+
 
     def vplot(self, kind=None):
 

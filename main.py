@@ -9,7 +9,7 @@ import autoval.utils as utils
 import matplotlib.pyplot as plt
 
 # Variables to validate
-to_validate = ['TMPA', 'WSPD', 'WDIR', 'RADS01']
+to_validate = ['TMPA', 'WSPD', 'RADS01', 'PCNR']
 
 # Station to validate
 stat_val = 'PN001002'
@@ -24,8 +24,8 @@ if __name__ == '__main__':
     # Reference station
     reference_observations = utils.open_observations('./data/' + stat_ref + '/', to_validate)
 
-    utils.Preprocess(observations).wind_components(substitute=True)
-    # utils.Preprocess(observations).clear_low_radiance()
+    #utils.Preprocess(observations).wind_components(substitute=True)
+    utils.Preprocess(observations).clear_low_radiance()
 
     # Validate
     # observations = observations.AutoVal.impossible_values(to_validate)

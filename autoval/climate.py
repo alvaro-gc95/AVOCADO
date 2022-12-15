@@ -8,7 +8,6 @@ import itertools
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 
 import autoval.utils
 import autoval.statistics
@@ -30,12 +29,15 @@ class Climatology:
             tmax = self._obj['TMPA'].resample('D').max().rename('TMAX')
             tmin = self._obj['TMPA'].resample('D').min().rename('TMIN')
             tmean = self._obj['TMPA'].resample('D').mean().rename('TMEAN')
-            daily_variables = pd.concat([daily_variables, tmax, tmin, tmean], axis=1)
+            tamp = abs(tmax - tmin)
+            tamp = tamp.rename('TAMP')
+            daily_variables = pd.concat([daily_variables, tamp, tmean], axis=1)
 
         if 'WSPD' in self._obj.columns:
-            vmax = self._obj['WSPD'].resample('D').max().rename('VMAX')
+            # vmax = self._obj['WSPD'].resample('D').max().rename('VMAX')
             vmean = self._obj['WSPD'].resample('D').mean().rename('VMEAN')
-            daily_variables = pd.concat([daily_variables, vmax, vmean], axis=1)
+            # daily_variables = pd.concat([daily_variables, vmax, vmean], axis=1)
+            daily_variables = pd.concat([daily_variables, vmean], axis=1)
 
         if 'RADS01' in self._obj.columns:
             autoval.utils.Preprocess(self._obj).clear_low_radiance()

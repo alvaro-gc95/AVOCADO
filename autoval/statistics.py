@@ -17,10 +17,12 @@ import autoval.utils
 
 
 class DaskPCA:
-    def __init__(self, data, n_components, standardize=False):
+    def __init__(self, data, n_components, mode, standardize=False):
         self.data = data
         self.n_components = n_components
+        self.mode = mode
         self.anomaly = self.anomalies(standardize=standardize)
+        self.eof, self.pc, self.explained_variance = self.calculate(mode=mode)
 
     @staticmethod
     def from_pandas_to_daskarray(df: pd.DataFrame, npartitions):
@@ -48,6 +50,11 @@ class DaskPCA:
         return anomaly
 
     def calculate(self, mode):
+        """
+        Calculate the principal components, empirical orthogonal functions and explained variance ratio.
+        :param mode: str. options = 'S' or 'T'. Mode of Analysis.
+        :return eofs, pc, explained_variance: (DataFrame, DataFrame, list)
+        """
 
         # Get Dask array of anomalies
         z = self.from_pandas_to_daskarray(self.anomaly, npartitions=3)
@@ -67,16 +74,35 @@ class DaskPCA:
         pca = PCA(n_components=self.n_components)
         pca.fit(s)
 
-        pc = z.dot(pca.components_)
+        # Empirical Orthogonal Functions
+        eofs = pd.DataFrame(pca.components_.transpose(),
+                            index=self.anomaly.columns,
+                            columns=['eof_' + str(c+1) for c in range(self.n_components)])
+
+        # Loadings
+        pc = self.anomaly.dot(eofs)
+        pc.columns = ['pc_' + str(c+1) for c in range(self.n_components)]
+
+        # Explained variance by each EOF
+        explained_variance = list(map(lambda x: x*100, pca.explained_variance_ratio_))
+
         # Clear some memory
         del z, s
         gc.collect()
 
-        print(pc)
-        print(pca.components_)
-        print([r * 100 for r in pca.explained_variance_ratio_])
+        return eofs, pc, explained_variance
 
-        return pca
+    def regression(self):
+
+        regression = self.pc.to_numpy().dot(self.eof.to_numpy().transpose())
+        regression = pd.DataFrame(regression, index=self.pc.index, columns=self.eof.index)
+
+        regression_error = self.anomaly - regression
+
+        print(self.anomaly)
+        print(regression)
+        print('-----')
+        return regression, regression_error
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
