@@ -49,6 +49,10 @@ class Climatology:
             ptot = self._obj['PCNR'].resample('D').sum().rename('PTOT')
             daily_variables = pd.concat([daily_variables, ptot], axis=1)
 
+        if 'RHMA' in self._obj.columns:
+            rhmean = self._obj['RHMA'].resample('D').mean().rename('RHMEAN')
+            daily_variables = pd.concat([daily_variables, rhmean], axis=1)
+
         daily_variables.index = pd.to_datetime(daily_variables.index)
 
         return daily_variables
