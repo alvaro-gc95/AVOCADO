@@ -1,11 +1,9 @@
 """
+Statistical methods
 
+Contact: alvaro@intermet.es
 """
 
-import itertools
-
-import numpy as np
-import xarray as xr
 import gc
 import dask.array as da
 import dask.dataframe as dd
@@ -93,19 +91,21 @@ class DaskPCA:
         return eofs, pc, explained_variance
 
     def regression(self):
-
+        """
+        Calculate the PCA regression and the reconstruction error
+        """
         regression = self.pc.to_numpy().dot(self.eof.to_numpy().transpose())
         regression = pd.DataFrame(regression, index=self.pc.index, columns=self.eof.index)
 
         regression_error = self.anomaly - regression
 
-        print(self.anomaly)
-        print(regression)
-        print('-----')
         return regression, regression_error
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
+    """
+    Get linear regression using pandas and calculate the residuals of the predicted values
+    """
     # Clean DataFrames of possible conflictive values
     x = autoval.utils.clean_dataset(x)
     y = autoval.utils.clean_dataset(y)
