@@ -50,7 +50,6 @@ class AutoValidation:
 
         # Find the dates of the values above the upper impossible limit and below the lower impossible limit
         for variable in variables:
-
             self._obj[variable + '_' + str(impossible_thresholds[variable][0])] = impossible_thresholds[variable][0]
             self._obj[variable + '_' + str(impossible_thresholds[variable][1])] = impossible_thresholds[variable][1]
 
@@ -144,7 +143,8 @@ class AutoValidation:
 
     def spatial_coherence(self, related_site, variables=None, min_corr=0.8, percentiles=None, skip_labels=True):
         """
-        Label values outside
+        Calculate the regression with a highly correlated station and label values with residuals outside the selected
+        percentile gap
         """
         # Variables to validate
         if variables is None:
@@ -178,60 +178,74 @@ class AutoValidation:
 
         return self._obj
 
-    def variance_test(self):
-        pass
+    def variance_test(self, variables=None, validation_window=None):
+        """
+        Label values within a selected window of time with an anomalous variance (too high or too low)
+        """
 
-    def internal_coherence(self):
+        # Variables to validate
+        if variables is None:
+            variables = self._variables
 
-        daily_df = Climatology(self._obj).climatological_variables()
+        # Validation window size
+        if validation_window is None:
+            validation_window = '1D'
 
-        ncols = 3
-        nrows = 4
-        fig = plt.figure()
-        ax = fig.subplots(nrows, ncols)
+    def internal_coherence(self, percentile=None):
+        """
+        Find relationships between daily climatological variables and label days that deviates from the expected
+        behaviour
+        """
 
-        regression = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
-        regression_error = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
-        anomaly = pd.DataFrame(index=daily_df.index, columns=daily_df.columns)
+        # Climatological percentile threshold to label data as suspicious
+        if percentile is None:
+            percentile = 0.99
 
+        # Get daily climatological variables
+        daily_climatological_variables = Climatology(self._obj).climatological_variables()
 
-        for month, monthly_df in daily_df.groupby(daily_df.index.month):
+        regression = pd.DataFrame(
+            index=daily_climatological_variables.index,
+            columns=daily_climatological_variables.columns
+        )
 
+        regression_error = pd.DataFrame(
+            index=daily_climatological_variables.index,
+            columns=daily_climatological_variables.columns
+        )
+
+        anomaly = pd.DataFrame(
+            index=daily_climatological_variables.index,
+            columns=daily_climatological_variables.columns
+        )
+
+        # Principal Components Analysis of daily variables for each month
+        for month, monthly_df in daily_climatological_variables.groupby(daily_climatological_variables.index.month):
+            # Get EOFs, PCAs and explained variance ratios
             pca = autoval.statistics.DaskPCA(monthly_df, n_components=3, mode='T', standardize=True)
 
+            # Reconstruct the original time series with the PCA
             regression_month, regression_error_month = pca.regression()
-
-            i = int(np.floor((month-1)/3))
-            j = int((month-1) - 3*i)
-
-            pca.eof.plot.bar(ax=ax[i, j])
-            ax[i, j].set_ylim(-1, 1)
 
             regression.loc[regression_month.index] = regression_month
             anomaly.loc[pca.anomaly.index] = pca.anomaly
             regression_error.loc[regression_error_month.index] = regression_error
 
-        fig.subplots_adjust(wspace=0, hspace=0)
-        plt.show()
-        regression.plot()
-        plt.show()
-
-        fig = plt.figure()
-        ax = fig.subplots(len(daily_df.columns))
-
+        # Get the error of the reconstruction in hourly resolution
         regression_error = anomaly - regression
-        print(regression_error)
-        fig2 = plt.figure()
-        ax2 = fig2.subplots(len(daily_df.columns))
-        for i, variable in enumerate(daily_df.columns):
-            anomaly[variable].plot(ax=ax[i], color='black')
-            regression[variable].plot(ax=ax[i])
+        regression_error_total = abs(regression_error).sum(axis=1)
+        regression_error_total = regression_error_total.where(regression_error_total > 0, np.nan)
 
-            regression_error[variable].hist(ax=ax2[i], bins=20)
-        plt.show()
+        regression_error = regression_error.resample('H').ffill()
+        regression_error_total = regression_error_total.resample('H').ffill()
 
+        # Label values with and error above the maximum percentile threshold
+        label_idx = regression_error.loc[regression_error_total >= regression_error_total.quantile(percentile)].index
+        label_idx = pd.to_datetime(label_idx)
+        self._obj['IC'] = 0
+        self._obj['IC'].loc[label_idx] = 1
 
-
+        return self._obj
 
     def vplot(self, kind=None):
 
@@ -242,62 +256,81 @@ class AutoValidation:
             kind = 'label_type'
 
         if kind == 'label_type':
+
+            label_type_colors = {
+                'IV': 'black',
+                'CC': 'red',
+                'SC': 'blue',
+                'TC': 'green',
+                'IC': 'yellow'
+            }
+
             for i, variable in enumerate(self._variables):
 
                 # Original data
                 self._obj[variable].plot(ax=ax[i], color='grey')
 
-                # Impossible values
-                if len(self._obj[variable].loc[self._obj[variable + '_IV'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_IV'] == 1].plot(ax=ax[i], marker='o', markersize=2,
-                                                                                   color='yellow', linewidth=0)
-                # Climatological coherence
-                if len(self._obj[variable].loc[self._obj[variable + '_CC'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_CC'] == 1].plot(ax=ax[i], marker='o', markersize=2,
-                                                                                   color='red', linewidth=0)
+                # Validation columns
+                label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
+                label_columns.extend([col for col in self._obj.columns if col not in self._variables and 'IC' in col])
 
-                # Temporal coherence
-                if len(self._obj[variable].loc[self._obj[variable + '_TC'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_TC'] == 1].plot(ax=ax[i], marker='o', markersize=2,
-                                                                                   color='green', linewidth=0)
-
-                # Spatial coherence
-                if len(self._obj[variable].loc[self._obj[variable + '_SC'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_SC'] == 1].plot(ax=ax[i], marker='o', markersize=2,
-                                                                                   color='blue', linewidth=0)
+                for label, color in label_type_colors.items():
+                    variable_label = [c for c in label_columns if label in c][0]
+                    if len(self._obj[variable].loc[self._obj[variable_label] == 1]) > 0:
+                        self._obj[variable].loc[self._obj[variable_label] == 1].plot(
+                            ax=ax[i],
+                            marker='o',
+                            markersize=2,
+                            color=color,
+                            linewidth=0)
 
                 ax[i].set_ylabel(variable)
 
         elif kind == 'label_count':
+
+            label_number_colors = {
+                1: 'blue',
+                2: 'green',
+                3: 'yellow',
+                4: 'red'
+            }
+
             for i, variable in enumerate(self._variables):
 
                 # Original data
                 self._obj[variable].plot(ax=ax[i], color='grey')
 
-                # Count the number of labels
+                # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
+                label_columns.extend([col for col in self._obj.columns if col not in self._variables and 'IC' in col])
+
+                # Count the number of labels
                 self._obj[variable + '_labels'] = self._obj[label_columns].sum(axis=1)
 
                 # Plot points by changing the color depending on the number of suspect labels
-                if len(self._obj[variable].loc[self._obj[variable + '_labels'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_labels'] == 1].plot(ax=ax[i], marker='o',
-                                                                                       markersize=2,
-                                                                                       color='green', linewidth=0)
-                if len(self._obj[variable].loc[self._obj[variable + '_labels'] == 2]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_labels'] == 2].plot(ax=ax[i], marker='o',
-                                                                                       markersize=2,
-                                                                                       color='yellow', linewidth=0)
-                if len(self._obj[variable].loc[self._obj[variable + '_labels'] >= 3]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_labels'] >= 3].plot(ax=ax[i], marker='o',
-                                                                                       markersize=2,
-                                                                                       color='red', linewidth=0)
-                # Impossible values
+                for n_labels, color in label_number_colors.items():
+                    if len(self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels]) > 0:
+                        self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels].plot(
+                            ax=ax[i],
+                            marker='o',
+                            markersize=2,
+                            color=color,
+                            linewidth=0
+                        )
+
+                # Mark Impossible values
                 if len(self._obj[variable].loc[self._obj[variable + '_IV'] == 1]) > 0:
-                    self._obj[variable].loc[self._obj[variable + '_IV'] == 1].plot(ax=ax[i], marker='o', markersize=2,
-                                                                                   color='black', linewidth=0)
+                    self._obj[variable].loc[self._obj[variable + '_IV'] == 1].plot(
+                        ax=ax[i],
+                        marker='o',
+                        markersize=2,
+                        color='black',
+                        linewidth=0
+                    )
 
                 ax[i].set_ylabel(variable)
 
+                # Delete the label counter from the DataFrame
                 self._obj.drop([variable + '_labels'], axis=1, inplace=True)
 
         return ax
@@ -314,7 +347,6 @@ def label_validation(df: pd.DataFrame, variables: dict, thresholds: (list, tuple
     """
 
     for labeling_variable, variable in variables.items():
-
         min_condition = df[labeling_variable] < df[labeling_variable + '_' + str(min(thresholds))]
         max_condition = df[labeling_variable] > df[labeling_variable + '_' + str(max(thresholds))]
 
@@ -342,7 +374,6 @@ def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
 
 
 def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, correlation_threshold, percentiles):
-
     regression, residuals = Climatology(original).spatial_regression(reference)
     regression_series = autoval.climate.table_to_series(regression, original.index)
 
