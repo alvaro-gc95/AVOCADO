@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import autoval.climate
 from autoval.climate import Climatology
 import autoval.statistics
+import autoval.utils
 
 impossible_thresholds = {
     'TMPA': [-100, 100],
@@ -178,19 +179,6 @@ class AutoValidation:
 
         return self._obj
 
-    def variance_test(self, variables=None, validation_window=None):
-        """
-        Label values within a selected window of time with an anomalous variance (too high or too low)
-        """
-
-        # Variables to validate
-        if variables is None:
-            variables = self._variables
-
-        # Validation window size
-        if validation_window is None:
-            validation_window = '1D'
-
     def internal_coherence(self, percentile=None):
         """
         Find relationships between daily climatological variables and label days that deviates from the expected
@@ -233,19 +221,41 @@ class AutoValidation:
 
         # Get the error of the reconstruction in hourly resolution
         regression_error = anomaly - regression
-        regression_error_total = abs(regression_error).sum(axis=1)
-        regression_error_total = regression_error_total.where(regression_error_total > 0, np.nan)
-
+        regression_error = regression_error.where(regression_error > 0, np.nan)
         regression_error = regression_error.resample('H').ffill()
-        regression_error_total = regression_error_total.resample('H').ffill()
+
+        original_variables = {
+            'RADST': 'RADS01',
+            'TAMP': 'TMPA',
+            'TMEAN': 'TMPA',
+            'PTOT': 'PCNR',
+            'RHMEAN': 'RHMA',
+            'VMEAN': 'WSPD'
+        }
 
         # Label values with and error above the maximum percentile threshold
-        label_idx = regression_error.loc[regression_error_total >= regression_error_total.quantile(percentile)].index
-        label_idx = pd.to_datetime(label_idx)
-        self._obj['IC'] = 0
-        self._obj['IC'].loc[label_idx] = 1
+        for variable in daily_climatological_variables.columns:
+            percentile_threshold = regression_error[variable].quantile(percentile)
+            label_idx = regression_error[variable].loc[regression_error[variable] >= percentile_threshold].index
+            label_idx = pd.to_datetime(label_idx)
+
+            self._obj[original_variables[variable] + '_IC'] = 0
+            self._obj[original_variables[variable] + '_IC'].loc[label_idx] = 1
 
         return self._obj
+
+    def variance_test(self, variables=None, validation_window=None):
+        """
+        Label values within a selected window of time with an anomalous variance (too high or too low)
+        """
+
+        # Variables to validate
+        if variables is None:
+            variables = self._variables
+
+        # Validation window size
+        if validation_window is None:
+            validation_window = '1D'
 
     def vplot(self, kind=None):
 
@@ -272,7 +282,6 @@ class AutoValidation:
 
                 # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
-                label_columns.extend([col for col in self._obj.columns if col not in self._variables and 'IC' in col])
 
                 for label, color in label_type_colors.items():
                     variable_label = [c for c in label_columns if label in c][0]
@@ -302,7 +311,6 @@ class AutoValidation:
 
                 # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
-                label_columns.extend([col for col in self._obj.columns if col not in self._variables and 'IC' in col])
 
                 # Count the number of labels
                 self._obj[variable + '_labels'] = self._obj[label_columns].sum(axis=1)
@@ -374,6 +382,9 @@ def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
 
 
 def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, correlation_threshold, percentiles):
+    """
+    """
+
     regression, residuals = Climatology(original).spatial_regression(reference)
     regression_series = autoval.climate.table_to_series(regression, original.index)
 

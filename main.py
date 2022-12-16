@@ -7,6 +7,7 @@ Contact: alvaro@intermet.es
 import autoval.validation_tests
 import autoval.utils as utils
 import matplotlib.pyplot as plt
+import get_era20c
 
 # Variables to validate
 to_validate = ['TMPA', 'WSPD', 'RADS01', 'PCNR', 'RHMA']
@@ -18,6 +19,8 @@ stat_val = 'PN001002'
 stat_ref = 'PN001004'
 
 if __name__ == '__main__':
+
+    get_era20c()
 
     # Open all data from a station
     observations = utils.open_observations('./data/' + stat_val + '/', to_validate)
