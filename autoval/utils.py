@@ -141,8 +141,7 @@ def open_observations(path: str, variables: list):
             data = pd.concat([data, variable_data], axis=1)
     # Check if the data exists
     if data.empty:
-        print('Warning: Empty data. Files may not exist in ' + path)
-        exit()
+        raise AttributeError('Warning: Empty data. Files may not exist in ' + path)
     else:
         return data
 
