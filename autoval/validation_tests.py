@@ -210,7 +210,29 @@ class AutoValidation:
         # Principal Components Analysis of daily variables for each month
         for month, monthly_df in daily_climatological_variables.groupby(daily_climatological_variables.index.month):
             # Get EOFs, PCAs and explained variance ratios
-            pca = autoval.statistics.DaskPCA(monthly_df, n_components=3, mode='T', standardize=True)
+            pca = autoval.statistics.DaskPCA(monthly_df, n_components=6, mode='T', standardize=True)
+
+            import seaborn as sns
+            eofs = pca.eof
+            eofs_line = []
+            eofs = eofs.reset_index()
+            eofs.columns = [col.replace('_', ' ') if col != eofs.columns[0] else 'variable' for col in eofs.columns]
+            for col in eofs:
+                if col != 'variable':
+                    individual_eof = eofs[col].to_frame()
+                    individual_eof['eof'] = col
+                    individual_eof.columns = ['standardized anomaly', 'eof']
+                    individual_eof = pd.concat([individual_eof, eofs['variable']], axis=1)
+
+                    eofs_line.append(individual_eof)
+            eofs_line = pd.concat(eofs_line, axis=0)
+            eofs_line = eofs_line.reset_index()
+            sns.set_palette('muted')
+            sns.set_style("darkgrid")
+            ax = sns.barplot(data=eofs_line, y='standardized anomaly', x='eof', hue='variable')
+            plt.title(month)
+            sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+            plt.show()
 
             # Reconstruct the original time series with the PCA
             regression_month, regression_error_month = pca.regression()
