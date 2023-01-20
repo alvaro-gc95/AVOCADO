@@ -33,7 +33,7 @@ class AutoValidation:
     def __init__(self, pandas_obj):
         self._validate(pandas_obj)
         self._obj = pandas_obj
-        self._variables = [c for c in pandas_obj.columns if c.split('_')[-1] not in ['IV', 'CC', 'TC', 'SC']]
+        self._variables = [c for c in pandas_obj.columns if c.split('_')[-1] not in ['IV', 'CC', 'TC', 'SC', 'VC']]
 
     @staticmethod
     def _validate(obj):
@@ -212,27 +212,27 @@ class AutoValidation:
             # Get EOFs, PCAs and explained variance ratios
             pca = autoval.statistics.DaskPCA(monthly_df, n_components=6, mode='T', standardize=True)
 
-            import seaborn as sns
-            eofs = pca.eof
-            eofs_line = []
-            eofs = eofs.reset_index()
-            eofs.columns = [col.replace('_', ' ') if col != eofs.columns[0] else 'variable' for col in eofs.columns]
-            for col in eofs:
-                if col != 'variable':
-                    individual_eof = eofs[col].to_frame()
-                    individual_eof['eof'] = col
-                    individual_eof.columns = ['standardized anomaly', 'eof']
-                    individual_eof = pd.concat([individual_eof, eofs['variable']], axis=1)
-
-                    eofs_line.append(individual_eof)
-            eofs_line = pd.concat(eofs_line, axis=0)
-            eofs_line = eofs_line.reset_index()
-            sns.set_palette('muted')
-            sns.set_style("darkgrid")
-            ax = sns.barplot(data=eofs_line, y='standardized anomaly', x='eof', hue='variable')
-            plt.title(month)
-            sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
-            plt.show()
+            # import seaborn as sns
+            # eofs = pca.eof
+            # eofs_line = []
+            # eofs = eofs.reset_index()
+            # eofs.columns = [col.replace('_', ' ') if col != eofs.columns[0] else 'variable' for col in eofs.columns]
+            # for col in eofs:
+            #     if col != 'variable':
+            #         individual_eof = eofs[col].to_frame()
+            #         individual_eof['eof'] = col
+            #         individual_eof.columns = ['standardized anomaly', 'eof']
+            #         individual_eof = pd.concat([individual_eof, eofs['variable']], axis=1)
+            #
+            #         eofs_line.append(individual_eof)
+            # eofs_line = pd.concat(eofs_line, axis=0)
+            # eofs_line = eofs_line.reset_index()
+            # sns.set_palette('muted')
+            # sns.set_style("darkgrid")
+            # ax = sns.barplot(data=eofs_line, y='standardized anomaly', x='eof', hue='variable')
+            # plt.title(month)
+            # sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+            # plt.show()
 
             # Reconstruct the original time series with the PCA
             regression_month, regression_error_month = pca.regression()
@@ -266,7 +266,7 @@ class AutoValidation:
 
         return self._obj
 
-    def variance_test(self, variables=None, validation_window=None):
+    def variance_test(self, variables=None, validation_window=None, percentiles=None):
         """
         Label values within a selected window of time with an anomalous variance (too high or too low)
         """
@@ -278,6 +278,36 @@ class AutoValidation:
         # Validation window size
         if validation_window is None:
             validation_window = '1D'
+
+        # Percentile threshold
+        if percentiles is None:
+            percentiles = [0.01, 0.99]
+
+        # Calculate the variance per month in windows of the same size
+        variances_for_windows = self._obj[variables].resample(validation_window).std()
+
+        # Monthly threshold values of variance
+        for variable in variables:
+
+            self._obj[variable + '_VC'] = 0
+
+            for month, month_dataset in variances_for_windows[variable].groupby(variances_for_windows.index.month):
+
+                lower_percentile = month_dataset.quantile(min(percentiles))
+                upper_percentile = month_dataset.quantile(max(percentiles))
+
+                month_dataset = month_dataset.resample('H').bfill()
+
+                label_idx = month_dataset.loc[
+                    (month_dataset >= upper_percentile) |
+                    (month_dataset <= lower_percentile)
+                ].index
+
+                label_idx = pd.to_datetime(label_idx)
+
+                self._obj[variable + '_VC'].loc[label_idx] = 1
+
+        return self._obj
 
     def vplot(self, kind=None):
 
@@ -294,6 +324,7 @@ class AutoValidation:
                 'CC': 'red',
                 'SC': 'blue',
                 'TC': 'green',
+                'VC': 'pink',
                 'IC': 'yellow'
             }
 
@@ -301,10 +332,10 @@ class AutoValidation:
 
                 # Original data
                 self._obj[variable].plot(ax=ax[i], color='grey')
-
+                print(self._obj.columns)
                 # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
-
+                print(label_columns)
                 for label, color in label_type_colors.items():
                     variable_label = [c for c in label_columns if label in c][0]
                     if len(self._obj[variable].loc[self._obj[variable_label] == 1]) > 0:
@@ -323,7 +354,8 @@ class AutoValidation:
                 1: 'blue',
                 2: 'green',
                 3: 'yellow',
-                4: 'red'
+                4: 'red',
+                5: 'purple'
             }
 
             for i, variable in enumerate(self._variables):
@@ -393,7 +425,7 @@ def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
     Ignore data where the selected labels = 1.
     """
     columns_to_ignore = [c for c in df.columns if c.split('_')[-1] in labels_to_skip]
-    label_columns = [c for c in df.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC']]
+    label_columns = [c for c in df.columns if c.split('_')[-1] in ['IV', 'CC', 'SC', 'TC', 'VC']]
 
     for col in columns_to_ignore:
         df = df[df[col] != 1]

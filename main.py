@@ -32,6 +32,7 @@ if __name__ == '__main__':
     observations = observations.AutoVal.impossible_values(to_validate)
     observations = observations.AutoVal.climatological_coherence(to_validate)
     observations = observations.AutoVal.temporal_coherence(to_validate)
+    observations = observations.AutoVal.variance_test(to_validate, '5D')
     observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
 
     utils.Preprocess(observations).clear_low_radiance()
