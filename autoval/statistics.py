@@ -18,7 +18,9 @@ class DaskPCA:
     def __init__(self, data, n_components, mode, standardize=False):
         self.data = data
         self.n_components = n_components
+        self.mean = self.data.mean()
         self.mode = mode
+        self.standardize = standardize
         self.anomaly = self.anomalies(standardize=standardize)
         self.eof, self.pc, self.explained_variance = self.calculate(mode=mode)
 
@@ -36,14 +38,12 @@ class DaskPCA:
         :param standardize: bool, optional. (Default=False). If True standardize of the anomalies.
         """
 
-        mean = self.data.mean()
-
         if standardize:
             std = self.data.std()
-            anomaly = (self.data - mean) / std
+            anomaly = (self.data - self.mean) / std
 
         else:
-            anomaly = self.data - mean
+            anomaly = self.data - self.mean
 
         return anomaly
 
@@ -90,16 +90,32 @@ class DaskPCA:
 
         return eofs, pc, explained_variance
 
-    def regression(self):
+    def project(self, new_data, standardize=False):
+        """
+        Project data onto the EOFs to obtain its PCs
+        """
+        # Get new data as anomalies
+        if standardize:
+            std = new_data.std()
+            new_anomaly = (new_data - self.mean) / std
+        else:
+            new_anomaly = new_data - self.mean
+
+        # Get the PCs
+        new_pcs = new_anomaly.to_numpy().dot(self.eof.to_numpy())
+
+        return new_pcs, new_anomaly
+
+    def regression(self, test_data):
         """
         Calculate the PCA regression and the reconstruction error
         """
-        regression = self.pc.to_numpy().dot(self.eof.to_numpy().transpose())
-        regression = pd.DataFrame(regression, index=self.pc.index, columns=self.eof.index)
+        pcs, anomaly = self.project(test_data, self.standardize)
+        regression = pcs.dot(self.eof.to_numpy().transpose())
+        regression = pd.DataFrame(regression, index=test_data.index, columns=self.eof.index)
+        regression_error = anomaly - regression
 
-        regression_error = self.anomaly - regression
-
-        return regression, regression_error
+        return regression, regression_error, pcs, anomaly
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
