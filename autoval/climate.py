@@ -57,12 +57,14 @@ class Climatology:
 
         return daily_variables
 
-    def daily_cycle(self, percentiles=None, to_series=False):
+    def daily_cycle(self, percentiles=None, to_series=False, dates=None):
         """
         Calculate the percentiles of the monthly daily cycles
         """
         if percentiles is None:
             percentiles = [0.1, 0.25, 0.5, 0.75, 0.9]
+        if dates is None:
+            dates = self._obj.index
 
         columns = [v + '_' + str(p) for v, p in itertools.product(self._obj.columns, percentiles)]
         # Calculate the index of the monthly daily cycles (format = hour_month)
@@ -81,7 +83,7 @@ class Climatology:
 
         # transform the monthly daily cycles to time series
         if to_series:
-            return table_to_series(climatology_percentiles, self._obj.index)
+            return table_to_series(climatology_percentiles, dates)
         else:
             return climatology_percentiles
 

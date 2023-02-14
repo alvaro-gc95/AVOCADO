@@ -9,34 +9,70 @@ import autoval.utils as utils
 import matplotlib.pyplot as plt
 
 
-# Variables to validate
-to_validate = ['TMPA', 'WSPD', 'RADS01', 'PCNR', 'RHMA']
+variables_to_validate = ['TMPA', 'WSPD', 'RADS01', 'PCNR', 'RHMA']
 
-# Station to validate
-stat_val = 'PN001002'
+station_to_validate = 'PN001002'
 
-# Reference station
-stat_ref = 'PN001004'
+reference_station = 'PN001004'
+
+# Validation parameters
+validation_start = [2015, 1, 1, 0, 0]
+validation_end = [2015, 12, 31, 23, 59]
+sampling_frequency = '1H'
 
 if __name__ == '__main__':
 
-    # Open all data from a station
-    observations = utils.open_observations('./data/' + stat_val + '/', to_validate)
+    observations = utils.open_observations('./data/' + station_to_validate + '/', variables_to_validate)
+    reference_observations = utils.open_observations('./data/' + reference_station + '/', variables_to_validate)
 
-    # Reference station
-    reference_observations = utils.open_observations('./data/' + stat_ref + '/', to_validate)
+    observations = observations.AutoVal.impossible_values(
+        variables_to_validate,
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
 
-    # utils.Preprocess(observations).wind_components(substitute=True)
+    observations = observations.AutoVal.climatological_coherence(
+        variables_to_validate,
+        percentiles=[0.05, 0.95],
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
 
-    # Validate
-    observations = observations.AutoVal.impossible_values(to_validate)
-    observations = observations.AutoVal.climatological_coherence(to_validate)
-    observations = observations.AutoVal.temporal_coherence(to_validate)
-    observations = observations.AutoVal.variance_test(to_validate, '5D')
-    observations = observations.AutoVal.spatial_coherence(reference_observations, to_validate)
+    observations = observations.AutoVal.temporal_coherence(
+        variables_to_validate,
+        percentiles=[0.05, 0.95],
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
+
+    observations = observations.AutoVal.variance_test(
+        variables_to_validate,
+        '1D',
+        percentiles=[0.05, 0.95],
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
+
+    observations = observations.AutoVal.spatial_coherence(
+        reference_observations,
+        variables_to_validate,
+        percentiles=[0.05, 0.95],
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
 
     utils.Preprocess(observations).clear_low_radiance()
-    observations = observations.AutoVal.internal_coherence()
+    observations = observations.AutoVal.internal_coherence(
+        percentiles=[0.05, 0.95],
+        start=validation_start,
+        end=validation_end,
+        freq=sampling_frequency
+    )
 
     # Plot the results
     observations.AutoVal.vplot(kind='label_type')

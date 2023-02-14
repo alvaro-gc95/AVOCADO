@@ -1,6 +1,4 @@
 """
-AutoVal 0.0.0
-
 Pandas extension to do automatic meteorological data validation
 
 Contact: alvaro@intermet.es
@@ -9,6 +7,7 @@ Contact: alvaro@intermet.es
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 import autoval.climate
 from autoval.climate import Climatology
@@ -41,7 +40,16 @@ class AutoValidation:
         if not (set(obj.columns) & set(impossible_thresholds.keys())):
             raise AttributeError("Must have " + ', '.join(impossible_thresholds.keys()))
 
-    def impossible_values(self, variables=None):
+    def split(self, start, end, freq):
+        validation_dataset, training_dataset, = split_data(
+            self._obj,
+            validation_start=start,
+            validation_end=end,
+            freq=freq
+        )
+        return validation_dataset, training_dataset
+
+    def impossible_values(self, variables=None, start=None, end=None, freq=None):
         """
         Label values outside an impossible threshold gap.
         """
@@ -49,24 +57,37 @@ class AutoValidation:
         if variables is None:
             variables = self._variables
 
+        # Split in training and validation datasets
+        to_validate, _ = self.split(start, end, freq)
+
         # Find the dates of the values above the upper impossible limit and below the lower impossible limit
         for variable in variables:
-            self._obj[variable + '_' + str(impossible_thresholds[variable][0])] = impossible_thresholds[variable][0]
-            self._obj[variable + '_' + str(impossible_thresholds[variable][1])] = impossible_thresholds[variable][1]
+            to_validate[variable + '_' + str(impossible_thresholds[variable][0])] = impossible_thresholds[variable][0]
+            to_validate[variable + '_' + str(impossible_thresholds[variable][1])] = impossible_thresholds[variable][1]
 
-            self._obj = label_validation(
-                self._obj,
+            to_validate = label_validation(
+                to_validate,
                 variables={variable: variable},
                 thresholds=impossible_thresholds[variable],
                 label='IV'
             )
 
-            self._obj.drop([variable + '_' + str(impossible_thresholds[variable][0])], inplace=True, axis=1)
-            self._obj.drop([variable + '_' + str(impossible_thresholds[variable][1])], inplace=True, axis=1)
+            to_validate.drop([variable + '_' + str(impossible_thresholds[variable][0])], inplace=True, axis=1)
+            to_validate.drop([variable + '_' + str(impossible_thresholds[variable][1])], inplace=True, axis=1)
+
+            label_columns = list(set(to_validate.columns) ^ set(self._obj.columns))
+            self._obj[label_columns] = np.nan
+            self._obj.loc[to_validate.index, label_columns] = to_validate[label_columns].copy()
 
         return self._obj
 
-    def climatological_coherence(self, variables=None, percentiles=None, skip_labels=True):
+    def climatological_coherence(
+            self,
+            variables=None,
+            percentiles=None,
+            start=None, end=None, freq=None,
+            skip_labels=True
+    ):
         """
         Label values outside extreme climatological percentile values.
         """
@@ -78,30 +99,41 @@ class AutoValidation:
         if percentiles is None:
             percentiles = [0.01, 0.99]
 
+        # Split in training and validation datasets
+        to_validate, training_dataset = self.split(start, end, freq)
+
         # Data to use to calculate the climatology
         if skip_labels:
-            train_data = skip_label(self._obj, labels_to_skip=['IV'])
+            training_dataset = skip_label(training_dataset, labels_to_skip=['IV'])
         else:
-            train_data = skip_label(self._obj, labels_to_skip=[])
+            training_dataset = skip_label(training_dataset, labels_to_skip=[])
 
         # Climatology time series
-        climatology = Climatology(train_data).daily_cycle(percentiles=percentiles, to_series=True)
-        self._obj = pd.concat([self._obj, climatology], axis=1)
+        climatology = Climatology(training_dataset).daily_cycle(
+            percentiles=percentiles,
+            to_series=True,
+            dates=to_validate.index
+        )
+        to_validate = pd.concat([to_validate, climatology], axis=1)
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        self._obj = label_validation(
-            self._obj,
+        to_validate = label_validation(
+            to_validate,
             variables=dict(zip(variables, variables)),
             thresholds=percentiles,
             label='CC'
         )
 
-        self._obj.drop(climatology.columns, axis=1, inplace=True)
+        to_validate.drop(climatology.columns, axis=1, inplace=True)
+
+        label_columns = list(set(to_validate.columns) ^ set(self._obj.columns))
+        self._obj[label_columns] = np.nan
+        self._obj.loc[to_validate.index, label_columns] = to_validate[label_columns].copy()
 
         return self._obj
 
-    def temporal_coherence(self, variables=None, percentiles=None, skip_labels=True):
+    def temporal_coherence(self, variables=None, percentiles=None, start=None, end=None, freq=None, skip_labels=True):
         """
         Label values with suspicious time evolution (too abrupt or too constant changes)
         """
@@ -118,31 +150,57 @@ class AutoValidation:
         delta_data.columns = [c + '_delta' for c in delta_data.columns]
         self._obj = pd.concat([self._obj, delta_data], axis=1)
 
+        # Split in training and validation datasets
+        to_validate, training_dataset = self.split(start, end, freq)
+
         # Data to use to calculate the climatology
         if skip_labels:
-            train_data = skip_label(self._obj[delta_data.columns], labels_to_skip=['IV'])
+            training_dataset = skip_label(
+                training_dataset[delta_data.columns].loc[training_dataset.index],
+                labels_to_skip=['IV']
+            )
         else:
-            train_data = skip_label(self._obj[delta_data.columns], labels_to_skip=[])
+            training_dataset = skip_label(
+                training_dataset[delta_data.columns].loc[training_dataset.index],
+                labels_to_skip=[]
+            )
 
         # Climatology time series
-        climatology = Climatology(train_data).daily_cycle(percentiles=percentiles, to_series=True)
-        self._obj = pd.concat([self._obj, climatology], axis=1)
+        climatology = Climatology(training_dataset).daily_cycle(
+            percentiles=percentiles,
+            to_series=True,
+            dates=to_validate.index
+        )
+        to_validate = pd.concat([to_validate, climatology], axis=1)
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        self._obj = label_validation(
-            self._obj,
+        to_validate = label_validation(
+            to_validate,
             variables=dict(zip(sorted(delta_data.columns), sorted(variables))),
             thresholds=percentiles,
             label='TC'
         )
 
-        self._obj.drop(climatology.columns, axis=1, inplace=True)
+        to_validate.drop(climatology.columns, axis=1, inplace=True)
+        to_validate.drop(delta_data.columns, axis=1, inplace=True)
         self._obj.drop(delta_data.columns, axis=1, inplace=True)
+
+        label_columns = list(set(to_validate.columns) ^ set(self._obj.columns))
+        self._obj[label_columns] = np.nan
+        self._obj.loc[to_validate.index, label_columns] = to_validate[label_columns].copy()
 
         return self._obj
 
-    def spatial_coherence(self, related_site, variables=None, min_corr=0.8, percentiles=None, skip_labels=True):
+    def spatial_coherence(
+            self,
+            related_site,
+            variables=None,
+            min_corr=0.8,
+            percentiles=None,
+            start=None, end=None, freq=None,
+            skip_labels=True
+    ):
         """
         Calculate the regression with a highly correlated station and label values with residuals outside the selected
         percentile gap
@@ -155,63 +213,91 @@ class AutoValidation:
         if percentiles is None:
             percentiles = [0.01, 0.99]
 
+        # Split in training and validation datasets
+        to_validate, training_dataset = self.split(start, end, freq)
+
         # Data to use to calculate the climatology
         if skip_labels:
-            train_data = skip_label(self._obj, labels_to_skip=['IV'])
+            training_dataset = skip_label(training_dataset, labels_to_skip=['IV'])
         else:
-            train_data = skip_label(self._obj, labels_to_skip=[])
+            training_dataset = skip_label(training_dataset, labels_to_skip=[])
 
         # Climatology of the regression residuals between observations and the reference data
-        residuals_climatology, residuals = get_significant_residuals(train_data, related_site, min_corr, percentiles)
-        self._obj = pd.concat([self._obj, residuals.astype('float64'), residuals_climatology], axis=1)
+        residuals = get_significant_residuals(training_dataset, related_site, min_corr)
+        residuals_climatology = Climatology(residuals.astype('float64')).daily_cycle(
+            percentiles=percentiles,
+            to_series=True,
+            dates=to_validate.index
+        )
+
+        # Get the residuals of the data to validate
+        to_validate = pd.concat([to_validate, residuals.astype('float64'), residuals_climatology], axis=1)
 
         # Compare the observations with the climatology, finding the dates of the values below the minimum percentile
         # or above the maximum percentile
-        self._obj = label_validation(
-            self._obj,
+        to_validate = label_validation(
+            to_validate,
             variables=dict(zip(sorted(residuals.columns), sorted(variables))),
             thresholds=percentiles,
             label='SC'
         )
 
-        self._obj.drop(residuals_climatology.columns, axis=1, inplace=True)
-        self._obj.drop(residuals.columns, axis=1, inplace=True)
+        to_validate.drop(residuals_climatology.columns, axis=1, inplace=True)
+        to_validate.drop(residuals.columns, axis=1, inplace=True)
+
+        label_columns = list(set(to_validate.columns) ^ set(self._obj.columns))
+        self._obj[label_columns] = np.nan
+        self._obj.loc[to_validate.index, label_columns] = to_validate[label_columns].copy()
 
         return self._obj
 
-    def internal_coherence(self, percentile=None):
+    def internal_coherence(self, percentiles=None, start=None, end=None, freq=None):
         """
         Find relationships between daily climatological variables and label days that deviates from the expected
         behaviour
         """
 
         # Climatological percentile threshold to label data as suspicious
-        if percentile is None:
-            percentile = 0.99
+        if percentiles is None:
+            percentiles = 0.99
 
-        # Get daily climatological variables
-        daily_climatological_variables = Climatology(self._obj).climatological_variables()
+        # Split in training and validation datasets
+        to_validate, training_dataset = self.split(start, end, freq)
 
+        # Get daily variables
+        daily_training_dataset = Climatology(training_dataset).climatological_variables()
+        daily_to_validate = Climatology(to_validate).climatological_variables()
+
+        # Make empty dataframes
         regression = pd.DataFrame(
-            index=daily_climatological_variables.index,
-            columns=daily_climatological_variables.columns
+            index=daily_training_dataset.index,
+            columns=daily_training_dataset.columns
         )
 
         regression_error = pd.DataFrame(
-            index=daily_climatological_variables.index,
-            columns=daily_climatological_variables.columns
+            index=daily_training_dataset.index,
+            columns=daily_training_dataset.columns
         )
 
         anomaly = pd.DataFrame(
-            index=daily_climatological_variables.index,
-            columns=daily_climatological_variables.columns
+            index=daily_training_dataset.index,
+            columns=daily_training_dataset.columns
         )
 
         # Principal Components Analysis of daily variables for each month
-        for month, monthly_df in daily_climatological_variables.groupby(daily_climatological_variables.index.month):
+        for month, monthly_df in daily_training_dataset.groupby(daily_training_dataset.index.month):
             # Get EOFs, PCAs and explained variance ratios
-            pca = autoval.statistics.DaskPCA(monthly_df, n_components=6, mode='T', standardize=True)
+            pca = autoval.statistics.DaskPCA(monthly_df, n_components=3, mode='T', standardize=True)
 
+            # pcs = pca.pc
+            # fig = plt.figure()
+            # ax = fig.subplots(3)
+            # pcs = pcs.dropna(axis=0)
+            # for i, col in enumerate(pcs.columns):
+            #     ax[i].plot(pcs[col].values)
+            #     ax[i].set_ylabel('PC' + str(i + 1))
+            # plt.subplots_adjust(hspace=0)
+            # plt.show()
             # import seaborn as sns
             # eofs = pca.eof
             # eofs_line = []
@@ -235,15 +321,23 @@ class AutoValidation:
             # plt.show()
 
             # Reconstruct the original time series with the PCA
-            regression_month, regression_error_month = pca.regression()
+
+            regression_month, regression_error_month, _, anomaly_month = pca.regression(test_data=daily_to_validate)
 
             regression.loc[regression_month.index] = regression_month
-            anomaly.loc[pca.anomaly.index] = pca.anomaly
+            anomaly.loc[daily_to_validate.index] = anomaly_month
             regression_error.loc[regression_error_month.index] = regression_error
+
+        fig = plt.figure()
+        ax = fig.subplots(len(regression.columns))
+        for i, col in enumerate(regression):
+            anomaly[col].plot(ax=ax[i], color='grey')
+            regression[col].plot(ax=ax[i], color='tab:blue', alpha=0.6)
+        plt.show()
 
         # Get the error of the reconstruction in hourly resolution
         regression_error = anomaly - regression
-        regression_error = regression_error.where(regression_error > 0, np.nan)
+        # regression_error = regression_error.where(regression_error > 0, np.nan)
         regression_error = regression_error.resample('H').ffill()
 
         original_variables = {
@@ -255,18 +349,27 @@ class AutoValidation:
             'VMEAN': 'WSPD'
         }
 
+        self._obj[[col + '_IC' for col in list(set(original_variables.values()))]] = 0
+
         # Label values with and error above the maximum percentile threshold
-        for variable in daily_climatological_variables.columns:
-            percentile_threshold = regression_error[variable].quantile(percentile)
-            label_idx = regression_error[variable].loc[regression_error[variable] >= percentile_threshold].index
+        for variable in daily_training_dataset.columns:
+
+            lower_percentile = regression_error[variable].quantile(min(percentiles))
+            upper_percentile = regression_error[variable].quantile(max(percentiles))
+
+            label_idx = regression_error[variable].loc[
+                    (regression_error[variable] >= upper_percentile) |
+                    (regression_error[variable] <= lower_percentile)
+                    ].index
             label_idx = pd.to_datetime(label_idx)
 
-            self._obj[original_variables[variable] + '_IC'] = 0
-            self._obj[original_variables[variable] + '_IC'].loc[label_idx] = 1
+            for idx in label_idx:
+                idx = pd.date_range(start=idx, periods=24, freq='H')
+                self._obj[original_variables[variable] + '_IC'].loc[idx] = 1
 
         return self._obj
 
-    def variance_test(self, variables=None, validation_window=None, percentiles=None):
+    def variance_test(self, variables=None, validation_window=None, percentiles=None, start=None, end=None, freq=None):
         """
         Label values within a selected window of time with an anomalous variance (too high or too low)
         """
@@ -283,41 +386,47 @@ class AutoValidation:
         if percentiles is None:
             percentiles = [0.01, 0.99]
 
+        # Split in training and validation datasets
+        to_validate, training_dataset = self.split(start, end, freq)
+
         # Calculate the variance per month in windows of the same size
-        variances_for_windows = self._obj[variables].resample(validation_window).std()
+        training_variances = training_dataset[variables].resample(validation_window).std()
+        variances_to_validate = to_validate[variables].resample(validation_window).std()
 
         # Monthly threshold values of variance
         for variable in variables:
 
-            self._obj[variable + '_VC'] = 0
+            self._obj[variable + '_VC'] = np.nan
+            self._obj[variable + '_VC'].loc[to_validate.index] = 0
 
-            for month, month_dataset in variances_for_windows[variable].groupby(variances_for_windows.index.month):
+            for month, month_dataset in variances_to_validate[variable].groupby(variances_to_validate.index.month):
 
-                lower_percentile = month_dataset.quantile(min(percentiles))
-                upper_percentile = month_dataset.quantile(max(percentiles))
+                monthly_variances = training_variances[variable].loc[training_variances.index.month == month]
+                lower_percentile = monthly_variances.quantile(min(percentiles))
+                upper_percentile = monthly_variances.quantile(max(percentiles))
 
-                month_dataset = month_dataset.resample('H').bfill()
+                low_extremes = month_dataset >= upper_percentile
+                high_extremes = month_dataset <= lower_percentile
+                label_idx = month_dataset.loc[low_extremes | high_extremes].index
 
-                label_idx = month_dataset.loc[
-                    (month_dataset >= upper_percentile) |
-                    (month_dataset <= lower_percentile)
-                ].index
-
-                label_idx = pd.to_datetime(label_idx)
-
-                self._obj[variable + '_VC'].loc[label_idx] = 1
+                for idx in label_idx:
+                    idx = pd.date_range(start=idx, periods=24, freq='H')
+                    self._obj[variable + '_VC'].loc[idx] = 1
 
         return self._obj
 
     def vplot(self, kind=None):
 
         fig = plt.figure()
-        ax = fig.subplots(len(self._variables))
+        axs = fig.subplots(len(self._variables))
 
         if kind is None:
             kind = 'label_type'
 
+        # Plot of the type of validation label
         if kind == 'label_type':
+
+            fig.suptitle('LABEL TYPE')
 
             label_type_colors = {
                 'IV': 'black',
@@ -330,25 +439,45 @@ class AutoValidation:
 
             for i, variable in enumerate(self._variables):
 
+                if len(self._variables) == 1:
+                    ax = axs
+                else:
+                    ax = axs[i]
+
                 # Original data
-                self._obj[variable].plot(ax=ax[i], color='grey')
-                print(self._obj.columns)
+                self._obj[variable].plot(ax=ax, color='grey')
+
                 # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
-                print(label_columns)
+
                 for label, color in label_type_colors.items():
-                    variable_label = [c for c in label_columns if label in c][0]
+
+                    # Get all the test labels
+                    variable_label = [c for c in label_columns if label in c]
+                    if len(variable_label) > 0:
+                        variable_label = variable_label[0]
+                    else:
+                        continue
+
+                    # Plot the labeled data
                     if len(self._obj[variable].loc[self._obj[variable_label] == 1]) > 0:
                         self._obj[variable].loc[self._obj[variable_label] == 1].plot(
-                            ax=ax[i],
+                            ax=ax,
                             marker='o',
                             markersize=2,
                             color=color,
                             linewidth=0)
 
-                ax[i].set_ylabel(variable)
+                ax.set_ylabel(variable)
 
+            markers = [plt.Line2D([0, 0], [0, 0], color=color, marker='o', linestyle='') for color in
+                       label_type_colors.values()]
+            plt.legend(markers, label_type_colors.keys(), numpoints=1)
+
+        # Plot of the number of validation labels per value
         elif kind == 'label_count':
+
+            fig.suptitle('LABEL COUNT')
 
             label_number_colors = {
                 1: 'blue',
@@ -360,8 +489,13 @@ class AutoValidation:
 
             for i, variable in enumerate(self._variables):
 
+                if len(self._variables) == 1:
+                    ax = axs
+                else:
+                    ax = axs[i]
+
                 # Original data
-                self._obj[variable].plot(ax=ax[i], color='grey')
+                self._obj[variable].plot(ax=ax, color='grey')
 
                 # Validation columns
                 label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
@@ -373,7 +507,7 @@ class AutoValidation:
                 for n_labels, color in label_number_colors.items():
                     if len(self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels]) > 0:
                         self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels].plot(
-                            ax=ax[i],
+                            ax=ax,
                             marker='o',
                             markersize=2,
                             color=color,
@@ -381,19 +515,24 @@ class AutoValidation:
                         )
 
                 # Mark Impossible values
-                if len(self._obj[variable].loc[self._obj[variable + '_IV'] == 1]) > 0:
+                if (variable + '_IV' in self._obj) and \
+                        (len(self._obj[variable].loc[self._obj[variable + '_IV'] == 1]) > 0):
                     self._obj[variable].loc[self._obj[variable + '_IV'] == 1].plot(
-                        ax=ax[i],
+                        ax=ax,
                         marker='o',
                         markersize=2,
                         color='black',
                         linewidth=0
                     )
 
-                ax[i].set_ylabel(variable)
+                ax.set_ylabel(variable)
 
                 # Delete the label counter from the DataFrame
                 self._obj.drop([variable + '_labels'], axis=1, inplace=True)
+
+            markers = [plt.Line2D([0, 0], [0, 0], color=color, marker='o', linestyle='') for color in
+                       label_number_colors.values()]
+            plt.legend(markers, label_number_colors.keys(), numpoints=1)
 
         return ax
 
@@ -435,8 +574,9 @@ def skip_label(df: pd.DataFrame, labels_to_skip: (list, tuple)):
     return df
 
 
-def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, correlation_threshold, percentiles):
+def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, correlation_threshold: float):
     """
+    Get the residuals only when the regression have a correlation coefficient above the selected threshold
     """
 
     regression, residuals = Climatology(original).spatial_regression(reference)
@@ -449,7 +589,25 @@ def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, c
         non_significant_dates = regression_series[col].loc[regression_series[col] < correlation_threshold].index
         residuals.loc[non_significant_dates, variable + '_residuals'] = np.nan
 
-    residuals_climatology = Climatology(residuals.astype('float64')).daily_cycle(percentiles=percentiles,
-                                                                                 to_series=True)
+    return residuals
 
-    return residuals_climatology, residuals
+
+def split_data(data: (pd.DataFrame, pd.Series), validation_start: list, validation_end: list, freq='1H'):
+    """
+    Split the data int he training dataset and validation dataset.
+    :param data: pd.DataFrame or pd.Series. Original dataset.
+    :param validation_start: list. Starting date of the validation period.
+    :param validation_end: list. Ending date of the validation period.
+    :param freq: str. Sampling frequency of the validation period.
+    """
+    validation_start = datetime(*validation_start)
+    validation_end = datetime(*validation_end)
+    validation_period = pd.date_range(start=validation_start, end=validation_end, freq=freq)
+
+    # Check that the validation period is in the original dataset
+    validation_period = sorted(list(set(validation_period) & set(data.index)))
+
+    validation_dataset = data.loc[validation_period]
+    training_dataset = data.drop(validation_period, axis=0)
+
+    return validation_dataset, training_dataset
