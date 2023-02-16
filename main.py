@@ -16,8 +16,8 @@ station_to_validate = 'PN001002'
 reference_station = 'PN001004'
 
 # Validation parameters
-validation_start = [2015, 1, 1, 0, 0]
-validation_end = [2015, 12, 31, 23, 59]
+validation_start = [2020, 1, 1, 0, 0]
+validation_end = [2020, 12, 31, 23, 59]
 sampling_frequency = '1H'
 
 if __name__ == '__main__':
@@ -75,6 +75,6 @@ if __name__ == '__main__':
     )
 
     # Plot the results
-    observations.AutoVal.vplot(kind='label_type')
-    observations.AutoVal.vplot(kind='label_count')
+    observations.AutoVal.vplot(kind='label_type', start=validation_start, end=validation_end, freq=sampling_frequency)
+    observations.AutoVal.vplot(kind='label_count', start=validation_start, end=validation_end, freq=sampling_frequency)
     plt.show()

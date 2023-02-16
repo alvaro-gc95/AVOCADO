@@ -415,7 +415,11 @@ class AutoValidation:
 
         return self._obj
 
-    def vplot(self, kind=None):
+    def vplot(self, kind=None, start=None, end=None, freq=None):
+
+        # Represent only the validation period
+        to_validate, _ = self.split(start, end, freq)
+        to_plot = self._obj.loc[to_validate.index].copy()
 
         fig = plt.figure()
         axs = fig.subplots(len(self._variables))
@@ -445,10 +449,10 @@ class AutoValidation:
                     ax = axs[i]
 
                 # Original data
-                self._obj[variable].plot(ax=ax, color='grey')
+                to_plot[variable].plot(ax=ax, color='grey')
 
                 # Validation columns
-                label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
+                label_columns = [col for col in to_plot.columns if col not in self._variables and variable in col]
 
                 for label, color in label_type_colors.items():
 
@@ -460,8 +464,8 @@ class AutoValidation:
                         continue
 
                     # Plot the labeled data
-                    if len(self._obj[variable].loc[self._obj[variable_label] == 1]) > 0:
-                        self._obj[variable].loc[self._obj[variable_label] == 1].plot(
+                    if len(to_plot[variable].loc[to_plot[variable_label] == 1]) > 0:
+                        to_plot[variable].loc[to_plot[variable_label] == 1].plot(
                             ax=ax,
                             marker='o',
                             markersize=2,
@@ -495,18 +499,18 @@ class AutoValidation:
                     ax = axs[i]
 
                 # Original data
-                self._obj[variable].plot(ax=ax, color='grey')
+                to_plot[variable].plot(ax=ax, color='grey')
 
                 # Validation columns
-                label_columns = [col for col in self._obj.columns if col not in self._variables and variable in col]
+                label_columns = [col for col in to_plot.columns if col not in self._variables and variable in col]
 
                 # Count the number of labels
-                self._obj[variable + '_labels'] = self._obj[label_columns].sum(axis=1)
+                to_plot[variable + '_labels'] = to_plot[label_columns].sum(axis=1)
 
                 # Plot points by changing the color depending on the number of suspect labels
                 for n_labels, color in label_number_colors.items():
-                    if len(self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels]) > 0:
-                        self._obj[variable].loc[self._obj[variable + '_labels'] == n_labels].plot(
+                    if len(to_plot[variable].loc[to_plot[variable + '_labels'] == n_labels]) > 0:
+                        to_plot[variable].loc[to_plot[variable + '_labels'] == n_labels].plot(
                             ax=ax,
                             marker='o',
                             markersize=2,
@@ -515,9 +519,9 @@ class AutoValidation:
                         )
 
                 # Mark Impossible values
-                if (variable + '_IV' in self._obj) and \
-                        (len(self._obj[variable].loc[self._obj[variable + '_IV'] == 1]) > 0):
-                    self._obj[variable].loc[self._obj[variable + '_IV'] == 1].plot(
+                if (variable + '_IV' in to_plot) and \
+                        (len(to_plot[variable].loc[to_plot[variable + '_IV'] == 1]) > 0):
+                    to_plot[variable].loc[to_plot[variable + '_IV'] == 1].plot(
                         ax=ax,
                         marker='o',
                         markersize=2,
@@ -528,7 +532,7 @@ class AutoValidation:
                 ax.set_ylabel(variable)
 
                 # Delete the label counter from the DataFrame
-                self._obj.drop([variable + '_labels'], axis=1, inplace=True)
+                to_plot.drop([variable + '_labels'], axis=1, inplace=True)
 
             markers = [plt.Line2D([0, 0], [0, 0], color=color, marker='o', linestyle='') for color in
                        label_number_colors.values()]
