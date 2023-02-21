@@ -83,7 +83,7 @@ class AutomaticValidation:
 
             label_columns = list(set(validation_dataset.columns) ^ set(self._obj.columns))
             self._obj[label_columns] = np.nan
-            self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns].copy()
+            self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns]
 
         return self._obj
 
@@ -134,7 +134,7 @@ class AutomaticValidation:
 
         label_columns = list(set(validation_dataset.columns) ^ set(self._obj.columns))
         self._obj[label_columns] = np.nan
-        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns].copy()
+        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns]
 
         return self._obj
 
@@ -169,12 +169,12 @@ class AutomaticValidation:
         # Data to use to calculate the climatology
         if skip_labels:
             training_dataset = skip_label(
-                training_dataset[delta_data.columns].loc[training_dataset.index],
+                training_dataset.loc[training_dataset.index, delta_data.columns],
                 labels_to_skip=['IV']
             )
         else:
             training_dataset = skip_label(
-                training_dataset[delta_data.columns].loc[training_dataset.index],
+                training_dataset.loc[training_dataset.index, delta_data.columns],
                 labels_to_skip=[]
             )
 
@@ -200,7 +200,7 @@ class AutomaticValidation:
 
         label_columns = list(set(validation_dataset.columns) ^ set(self._obj.columns))
         self._obj[label_columns] = np.nan
-        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns].copy()
+        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns]
 
         return self._obj
 
@@ -240,11 +240,14 @@ class AutomaticValidation:
         for variable in variables:
 
             self._obj[variable + '_VC'] = np.nan
-            self._obj[variable + '_VC'].loc[validation_dataset.index] = 0
+            self._obj.loc[validation_dataset.index, variable + '_VC'] = 0
 
             for month, month_validation in variances_to_validate[variable].groupby(variances_to_validate.index.month):
 
-                training_month_variances = training_variances[variable].loc[training_variances.index.month == month]
+                training_month_variances = training_variances.loc[
+                    training_variances.index.month == month,
+                    variable
+                ]
                 lower_percentile = training_month_variances.quantile(min(percentiles))
                 upper_percentile = training_month_variances.quantile(max(percentiles))
 
@@ -254,7 +257,7 @@ class AutomaticValidation:
 
                 for idx in label_idx:
                     idx = pd.date_range(start=idx, periods=24, freq='H')
-                    self._obj[variable + '_VC'].loc[idx] = 1
+                    self._obj.loc[idx, variable + '_VC'] = 1
 
         return self._obj
 
@@ -330,7 +333,7 @@ class AutomaticValidation:
 
         label_columns = list(set(validation_dataset.columns) ^ set(self._obj.columns))
         self._obj[label_columns] = np.nan
-        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns].copy()
+        self._obj.loc[validation_dataset.index, label_columns] = validation_dataset[label_columns]
 
         return self._obj
 
@@ -438,16 +441,14 @@ class AutomaticValidation:
         maximum_band = pd.DataFrame(columns=maximum_band_columns, index=daily_validation_dataset.index)
         minimum_band = pd.DataFrame(columns=minimum_band_columns, index=daily_validation_dataset.index)
 
-        training_residuals.plot()
-        validation_residuals.plot()
-
         # Label values with and error above the maximum percentile threshold
         for variable in daily_training_dataset.columns:
             for month, monthly_error in training_residuals.groupby(training_residuals.index.month):
 
-                monthly_regression_error_validation = validation_residuals[variable].loc[
-                    validation_residuals.index.month == month
-                ].copy()
+                monthly_regression_error_validation = validation_residuals.loc[
+                    validation_residuals.index.month == month,
+                    variable
+                ]
 
                 lower_percentile = monthly_error[variable].quantile(min(percentiles))
                 upper_percentile = monthly_error[variable].quantile(max(percentiles))
@@ -458,12 +459,12 @@ class AutomaticValidation:
                 ].index
                 label_idx = pd.to_datetime(label_idx)
 
-                maximum_band[variable + '_maximum_threshold'].loc[maximum_band.index.month == month] = upper_percentile
-                minimum_band[variable + '_minimum_threshold'].loc[minimum_band.index.month == month] = lower_percentile
+                maximum_band.loc[maximum_band.index.month == month, variable + '_maximum_threshold'] = upper_percentile
+                minimum_band.loc[minimum_band.index.month == month, variable + '_minimum_threshold'] = lower_percentile
 
                 for idx in label_idx:
                     idx = pd.date_range(start=idx, periods=24, freq='H')
-                    self._obj[original_variables[variable] + '_IC'].loc[idx] = 1
+                    self._obj.loc[idx, original_variables[variable] + '_IC'] = 1
 
         maximum_band = maximum_band + validation_anomaly.values
         minimum_band = minimum_band + validation_anomaly.values
@@ -474,10 +475,13 @@ class AutomaticValidation:
             minimum_threshold = minimum_band[variable + '_minimum_threshold']
             maximum_threshold = maximum_band[variable + '_maximum_threshold']
 
-            label_idx = validation_regression[variable].loc[(validation_regression[variable] < minimum_threshold) |
-                                                            (validation_regression[variable] > maximum_threshold)].index
+            label_idx = validation_regression.loc[
+                (validation_regression[variable] < minimum_threshold) |
+                (validation_regression[variable] > maximum_threshold),
+                variable
+            ].index
 
-            self._obj[original_variables[variable] + '_IC'].loc[label_idx] = 1
+            self._obj.loc[label_idx, original_variables[variable] + '_IC'] = 1
 
         if plot_reconstruction:
 
@@ -500,7 +504,7 @@ class AutomaticValidation:
 
         # Represent only the validation period
         to_validate, _ = self.split(start, end, freq)
-        to_plot = self._obj.loc[to_validate.index].copy()
+        to_plot = self._obj.loc[to_validate.index]
 
         plt.rc('text', usetex=True)
         plt.rc('font', family='serif')
@@ -548,8 +552,9 @@ class AutomaticValidation:
                         continue
 
                     # Plot the labeled data
-                    if len(to_plot[variable].loc[to_plot[variable_label] == 1]) > 0:
-                        to_plot[variable].loc[to_plot[variable_label] == 1].plot(
+                    labeled_values = to_plot.loc[to_plot[variable_label] == 1, variable]
+                    if len(labeled_values) > 0:
+                        labeled_values.plot(
                             ax=ax,
                             marker='o',
                             markersize=2,
@@ -605,8 +610,8 @@ class AutomaticValidation:
 
                 # Plot points by changing the color depending on the number of suspect labels
                 for n_labels, color in label_number_colors.items():
-                    if len(to_plot[variable].loc[to_plot[variable + '_labels'] == n_labels]) > 0:
-                        to_plot[variable].loc[to_plot[variable + '_labels'] == n_labels].plot(
+                    if len(to_plot.loc[to_plot[variable + '_labels'] == n_labels, variable]) > 0:
+                        to_plot.loc[to_plot[variable + '_labels'] == n_labels, variable].plot(
                             ax=ax,
                             marker='o',
                             markersize=2,
@@ -615,9 +620,8 @@ class AutomaticValidation:
                         )
 
                 # Mark Impossible values
-                if (variable + '_IV' in to_plot) and \
-                        (len(to_plot[variable].loc[to_plot[variable + '_IV'] == 1]) > 0):
-                    to_plot[variable].loc[to_plot[variable + '_IV'] == 1].plot(
+                if variable + '_IV' in to_plot and len(to_plot.loc[to_plot[variable + '_IV'] == 1, variable]) > 0:
+                    to_plot.loc[to_plot[variable + '_IV'] == 1, variable].plot(
                         ax=ax,
                         marker='o',
                         markersize=2,
@@ -659,7 +663,7 @@ def put_validation_label(data: pd.DataFrame, variables: dict, label: str):
         min_condition = data[labeling_variable] < data[labeling_variable + '_minimum_threshold']
         max_condition = data[labeling_variable] > data[labeling_variable + '_maximum_threshold']
 
-        labeled_dates = data[variable].loc[min_condition | max_condition].index
+        labeled_dates = data.loc[min_condition | max_condition, variable].index
 
         data[variable + '_' + label] = 0
         data.loc[labeled_dates, variable + '_' + label] = 1
@@ -723,10 +727,10 @@ def fit_climatology_regression(regressor: pd.DataFrame, x: pd.DataFrame):
 
         dates = (x.index.month == date_month) & (x.index.hour == date_hour)
 
-        coef = regressor[variable + '_coef'].loc[date]
-        intercept = regressor[variable + '_intercept'].loc[date]
+        coef = regressor.loc[date, variable + '_coef']
+        intercept = regressor.loc[date, variable + '_intercept']
 
-        y[variable].loc[dates] = x[variable].loc[dates].apply(lambda _x: _x*coef + intercept)
+        y.loc[dates, variable] = x.loc[dates, variable].apply(lambda _x: _x*coef + intercept)
 
     residuals = x - y
     residuals.columns = [col + '_residuals' for col in residuals.columns]
@@ -746,7 +750,7 @@ def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, c
 
     for col in correlation_columns:
         variable = col.split('_')[0]
-        non_significant_dates = regression_series[col].loc[regression_series[col] < correlation_threshold].index
+        non_significant_dates = regression_series.loc[regression_series[col] < correlation_threshold, col].index
         residuals.loc[non_significant_dates, variable + '_residuals'] = np.nan
 
     return regression, residuals

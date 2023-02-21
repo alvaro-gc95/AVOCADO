@@ -25,39 +25,39 @@ if __name__ == '__main__':
     observations = utils.open_observations('./data/' + station_to_validate + '/', variables_to_validate)
     reference_observations = utils.open_observations('./data/' + reference_station + '/', variables_to_validate)
 
-    observations = observations.validate.impossible_values(
-        variables_to_validate,
-        start=validation_start,
-        end=validation_end,
-        freq=sampling_frequency
-    )
-
-    observations = observations.validate.climatological_coherence(
-        variables_to_validate,
-        percentiles=[0.1, 0.90],
-        start=validation_start,
-        end=validation_end,
-        freq=sampling_frequency
-    )
-
-    observations = observations.validate.variance_test(
-        variables_to_validate,
-        '1D',
-        percentiles=[0.1, 0.90],
-        start=validation_start,
-        end=validation_end,
-        freq=sampling_frequency
-    )
-
-    observations = observations.validate.spatial_coherence(
-        reference_observations,
-        variables_to_validate,
-        min_corr=0.8,
-        percentiles=[0.1, 0.90],
-        start=validation_start,
-        end=validation_end,
-        freq=sampling_frequency
-    )
+    # observations = observations.validate.impossible_values(
+    #     variables_to_validate,
+    #     start=validation_start,
+    #     end=validation_end,
+    #     freq=sampling_frequency
+    # )
+    #
+    # observations = observations.validate.climatological_coherence(
+    #     variables_to_validate,
+    #     percentiles=[0.1, 0.90],
+    #     start=validation_start,
+    #     end=validation_end,
+    #     freq=sampling_frequency
+    # )
+    #
+    # observations = observations.validate.variance_test(
+    #     variables_to_validate,
+    #     '1D',
+    #     percentiles=[0.1, 0.90],
+    #     start=validation_start,
+    #     end=validation_end,
+    #     freq=sampling_frequency
+    # )
+    #
+    # observations = observations.validate.spatial_coherence(
+    #     reference_observations,
+    #     variables_to_validate,
+    #     min_corr=0.8,
+    #     percentiles=[0.1, 0.90],
+    #     start=validation_start,
+    #     end=validation_end,
+    #     freq=sampling_frequency
+    # )
 
     cleared_radiation_observations = utils.Preprocess(observations).clear_low_radiance()
     observations = cleared_radiation_observations.validate.internal_coherence(

@@ -109,7 +109,6 @@ class Climatology:
                     (related_site.index.month == month) &
                     (related_site.index.hour == hour)
                 ]
-                hour_dataset = hour_dataset
 
                 # Correlate the datasets
                 correlation = related_site_hm.corrwith(hour_dataset)
@@ -146,7 +145,8 @@ def table_to_series(df: pd.DataFrame, new_index):
     for variable in df.columns:
         for month, month_dataset in climatology_series.groupby(climatology_series.index.month):
             for hour, hourly_dataset in month_dataset.groupby(month_dataset.index.hour):
-                climatology_series.loc[hourly_dataset.index, variable] = df.loc[str(hour) + '_' + str(month), variable]
+                climatology_series.loc[hourly_dataset.index, variable] = \
+                    df.loc[str(hour) + '_' + str(month), variable]
 
     return climatology_series
 
