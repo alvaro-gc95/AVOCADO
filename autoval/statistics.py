@@ -9,6 +9,7 @@ import dask.array as da
 import dask.dataframe as dd
 from dask_ml.decomposition import PCA
 import pandas as pd
+import numpy as np
 from sklearn.linear_model import LinearRegression
 
 import autoval.utils
@@ -75,14 +76,14 @@ class DaskPCA:
         # Empirical Orthogonal Functions
         eofs = pd.DataFrame(pca.components_.transpose(),
                             index=self.anomaly.columns,
-                            columns=['eof_' + str(c+1) for c in range(self.n_components)])
+                            columns=['eof_' + str(c + 1) for c in range(self.n_components)])
 
         # Loadings
         pc = self.anomaly.dot(eofs)
-        pc.columns = ['pc_' + str(c+1) for c in range(self.n_components)]
+        pc.columns = ['pc_' + str(c + 1) for c in range(self.n_components)]
 
         # Explained variance by each EOF
-        explained_variance = list(map(lambda x: x*100, pca.explained_variance_ratio_))
+        explained_variance = list(map(lambda x: x * 100, pca.explained_variance_ratio_))
 
         # Clear some memory
         del z, s
@@ -113,9 +114,9 @@ class DaskPCA:
         pcs, anomaly = self.project(test_data, self.standardize)
         regression = pcs.dot(self.eof.to_numpy().transpose())
         regression = pd.DataFrame(regression, index=test_data.index, columns=self.eof.index)
-        regression_error = anomaly - regression
+        residual = regression - anomaly
 
-        return regression, regression_error, pcs, anomaly
+        return regression, residual, pcs, anomaly
 
 
 def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
@@ -139,3 +140,6 @@ def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
     residuals = x - linear_regressor.predict(x)
 
     return linear_regressor, residuals
+
+
+

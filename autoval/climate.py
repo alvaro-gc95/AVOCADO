@@ -149,3 +149,17 @@ def table_to_series(df: pd.DataFrame, new_index):
                 climatology_series.loc[hourly_dataset.index, variable] = df.loc[str(hour) + '_' + str(month), variable]
 
     return climatology_series
+
+
+def yamartino(theta: np.array):
+    """
+    Yamartino method to compute wind direction standard deviation
+    """
+
+    s = np.mean(np.sin(np.radians(theta)))
+    c = np.mean(np.cos(np.radians(theta)))
+
+    eps = (1 - (s ** 2 + c ** 2)) ** 0.5
+    sigma = np.asin(eps) * (1 + (2.0 / 3.0 ** 0.5 - 1) * eps ** 3)
+
+    return np.degrees(sigma)

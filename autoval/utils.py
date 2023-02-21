@@ -36,6 +36,8 @@ class Preprocess:
         if substitute:
             self._obj.drop(['WSPD', 'WDIR'], axis=1, inplace=True)
 
+        return self._obj
+
     def clear_low_radiance(self, rad_thr=200):
         """
         Delete Shortwave incoming radiance below the "night" threshold
@@ -43,6 +45,8 @@ class Preprocess:
         self._check_variable_in_obj(self._obj, ['RADS01'])
 
         self._obj['RADS01'] = self._obj['RADS01'].where(self._obj['RADS01'] >= rad_thr, np.nan)
+
+        return self._obj
 
 
 class Configuration:
