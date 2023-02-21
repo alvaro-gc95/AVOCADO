@@ -508,8 +508,9 @@ class AutomaticValidation:
 
         plt.rc('text', usetex=True)
         plt.rc('font', family='serif')
+        plt.rcParams.update({'font.size': 13})
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=(14, 1.5*len(self._variables)))
         axs = fig.subplots(len(self._variables))
 
         if kind is None:
@@ -518,7 +519,7 @@ class AutomaticValidation:
         # Plot of the type of validation label
         if kind == 'label_type':
 
-            fig.suptitle('Coherence label type')
+            fig.suptitle('Coherence label type', fontsize=20)
 
             label_type_colors = {
                 'IV': 'black',
@@ -562,10 +563,9 @@ class AutomaticValidation:
                             linewidth=0)
 
                 if i != len(self._variables) - 1:
-                    ax.set_xticks([])
-                    ax.set_xticklabels([])
+                    ax.xaxis.set_ticklabels([])
 
-                ax.set_ylabel(variable)
+                ax.set_ylabel(variable, fontsize=15)
 
             markers = [plt.Line2D([0, 0], [0, 0], color=color, marker='o', linestyle='') for color in
                        label_type_colors.values()]
@@ -577,12 +577,12 @@ class AutomaticValidation:
                 ncol=len(label_type_colors),
                 bbox_to_anchor=(0.5, 0.95)
             )
-            fig.subplots_adjust(hspace=0)
+            fig.subplots_adjust(hspace=0.07)
 
         # Plot of the number of validation labels per value
         elif kind == 'label_count':
 
-            fig.suptitle('Number of labels')
+            fig.suptitle('Number of labels', fontsize=20)
 
             label_number_colors = {
                 1: 'tab:blue',
@@ -629,7 +629,10 @@ class AutomaticValidation:
                         linewidth=0
                     )
 
-                ax.set_ylabel(variable)
+                if i != len(self._variables) - 1:
+                    ax.xaxis.set_ticklabels([])
+
+                ax.set_ylabel(variable, fontsize=15)
 
                 # Delete the label counter from the DataFrame
                 to_plot.drop([variable + '_labels'], axis=1, inplace=True)
@@ -644,7 +647,7 @@ class AutomaticValidation:
                 ncol=len(label_number_colors),
                 bbox_to_anchor=(0.5, 0.95)
             )
-            fig.subplots_adjust(hspace=0)
+            fig.subplots_adjust(hspace=0.07)
 
         return ax
 
