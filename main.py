@@ -16,8 +16,8 @@ station_to_validate = 'PN001002'
 reference_station = 'PN001004'
 
 # Validation parameters
-validation_start = [2018, 1, 1, 0, 0]
-validation_end = [2018, 12, 31, 23, 59]
+validation_start = [2014, 1, 1, 0, 0]
+validation_end = [2014, 12, 31, 23, 59]
 sampling_frequency = '1H'
 
 if __name__ == '__main__':
@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     observations = observations.validate.climatological_coherence(
         variables_to_validate,
-        percentiles=[0.1, 0.90],
+        percentiles=[0.01, 0.99],
         start=validation_start,
         end=validation_end,
         freq=sampling_frequency
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     observations = observations.validate.variance_test(
         variables_to_validate,
         '1D',
-        percentiles=[0.1, 0.90],
+        percentiles=[0.01, 0.99],
         start=validation_start,
         end=validation_end,
         freq=sampling_frequency
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         reference_observations,
         variables_to_validate,
         min_corr=0.8,
-        percentiles=[0.1, 0.90],
+        percentiles=[0.01, 0.99],
         start=validation_start,
         end=validation_end,
         freq=sampling_frequency
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
     cleared_radiation_observations = utils.Preprocess(observations).clear_low_radiance()
     observations = cleared_radiation_observations.validate.internal_coherence(
-        percentiles=[0.1, 0.9],
+        percentiles=[0.01, 0.99],
         start=validation_start,
         end=validation_end,
         freq=sampling_frequency,

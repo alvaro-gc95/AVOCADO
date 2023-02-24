@@ -353,7 +353,7 @@ class AutomaticValidation:
 
         # Climatological percentile threshold to label data as suspicious
         if percentiles is None:
-            percentiles = 0.99
+            percentiles = [0.01, 0.99]
 
         # Split in training and validation datasets
         validation_dataset, training_dataset = self.split(start, end, freq)
@@ -425,6 +425,10 @@ class AutomaticValidation:
         validation_residuals = validation_residuals.resample('H').ffill()
         training_residuals = training_residuals.resample('H').ffill()
 
+        # Change signs of the residuals
+        validation_residuals = -validation_residuals
+        training_residuals = -training_residuals
+
         original_variables = {
             'RADST': 'RADS01',
             'TAMP': 'TMPA',
@@ -453,35 +457,32 @@ class AutomaticValidation:
                 lower_percentile = monthly_error[variable].quantile(min(percentiles))
                 upper_percentile = monthly_error[variable].quantile(max(percentiles))
 
-                label_idx = monthly_regression_error_validation.loc[
-                    (monthly_regression_error_validation >= upper_percentile) |
-                    (monthly_regression_error_validation <= lower_percentile)
-                ].index
-                label_idx = pd.to_datetime(label_idx)
-
                 maximum_band.loc[maximum_band.index.month == month, variable + '_maximum_threshold'] = upper_percentile
                 minimum_band.loc[minimum_band.index.month == month, variable + '_minimum_threshold'] = lower_percentile
 
-                for idx in label_idx:
-                    idx = pd.date_range(start=idx, periods=24, freq='H')
-                    self._obj.loc[idx, original_variables[variable] + '_IC'] = 1
-
-        maximum_band = maximum_band + validation_anomaly.values
-        minimum_band = minimum_band + validation_anomaly.values
+        maximum_band = maximum_band + validation_regression.values
+        minimum_band = minimum_band + validation_regression.values
         maximum_band = maximum_band.astype('float32')
         minimum_band = minimum_band.astype('float32')
 
+        # Label all the variables when one is suspicious if internal incoherence
+        labeled_idx = set()
         for variable in validation_regression.columns:
             minimum_threshold = minimum_band[variable + '_minimum_threshold']
             maximum_threshold = maximum_band[variable + '_maximum_threshold']
 
-            label_idx = validation_regression.loc[
-                (validation_regression[variable] < minimum_threshold) |
-                (validation_regression[variable] > maximum_threshold),
+            dates_label_idx = validation_anomaly.loc[
+                (validation_anomaly[variable] < minimum_threshold) |
+                (validation_anomaly[variable] > maximum_threshold),
                 variable
             ].index
 
-            self._obj.loc[label_idx, original_variables[variable] + '_IC'] = 1
+            for idx in dates_label_idx:
+                idx = pd.date_range(start=idx, periods=24, freq='H')
+                labeled_idx = labeled_idx.union(set(list(idx)))
+
+        label_columns = [col + '_IC' for col in list(set(original_variables.values()))]
+        self._obj.loc[list(labeled_idx), label_columns] = 1
 
         if plot_reconstruction:
 
@@ -856,34 +857,45 @@ def plot_pca_reconstructions(original, reconstruction, minimum_err=None, maximum
     sns.set_style("darkgrid")
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
+    plt.rcParams.update({'font.size': 13})
 
     # Take only the reconstructed period
     original = original.dropna(axis=0)
     reconstruction = reconstruction.dropna(axis=0)
 
-    fig = plt.figure()
-    fig.suptitle('Standarized anomalies')
+    fig = plt.figure(figsize=(14, 1.5 * len(reconstruction.columns)))
+    fig.suptitle('Standardized anomalies')
     ax = fig.subplots(len(reconstruction.columns))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
 
     for i, col in enumerate(reconstruction):
-        original[col].plot(ax=ax[i], color='grey', label='original')
 
         if minimum_err is not None:
-            minimum_err[col + '_minimum_threshold'].plot(ax=ax[i], color='tab:red', alpha=0.4)
+            minimum_err[col + '_minimum_threshold'].plot(ax=ax[i], color='tab:blue', alpha=0.4, label='_nolegend_')
         if maximum_err is not None:
-            maximum_err[col + '_maximum_threshold'].plot(ax=ax[i], color='tab:red', alpha=0.4)
+            maximum_err[col + '_maximum_threshold'].plot(ax=ax[i], color='tab:blue', alpha=0.4, label='_nolegend_')
         if maximum_err is not None and minimum_err is not None:
             ax[i].fill_between(
                 maximum_err[col + '_maximum_threshold'].index,
                 minimum_err[col + '_minimum_threshold'],
                 maximum_err[col + '_maximum_threshold'],
-                alpha=0.4, color='tab:red'
+                alpha=0.4, color='tab:blue', label='Reconstruction residuals thresholds'
             )
-
-        reconstruction[col].plot(ax=ax[i], color='tab:blue', alpha=0.6, label='reconstruction')
+        reconstruction[col].plot(ax=ax[i], color='tab:blue', label='Reconstruction')
+        original[col].plot(ax=ax[i], color='black', alpha=0.6, label='Original')
 
         ax[i].set_ylabel(col)
 
-    fig.subplots_adjust(hspace=0)
+        if i != len(reconstruction.columns) - 1:
+            ax[i].xaxis.set_ticklabels([])
 
+    fig.subplots_adjust(hspace=0.07)
+    handles, labels = ax[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc='upper center',
+        ncol=3,
+        bbox_to_anchor=(0.5, 0.95)
+    )
     plt.show()
