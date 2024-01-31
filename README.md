@@ -1,5 +1,5 @@
-# AutoVal
-AutoVal is a python pandas extension of automatic tests for meteorological data validation.
+# AVOCADO (Automatic ValidatiOn and Coherence Assesment of Data from Observations)
+AVOCADO is a python pandas extension of automatic tests for meteorological data validation.
 
 ## Dependencies
 This extension works in a python 3.8 environment and needs the following python libraries:
