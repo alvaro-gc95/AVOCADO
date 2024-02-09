@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-import autoval.utils
+import avocado.utils
 
 
 class DaskPCA:
@@ -27,7 +27,7 @@ class DaskPCA:
 
     @staticmethod
     def from_pandas_to_daskarray(df: pd.DataFrame, npartitions):
-        df = autoval.utils.clean_dataset(df)
+        df = avocado.utils.clean_dataset(df)
         daskarr = dd.from_pandas(df, npartitions=npartitions).to_dask_array()
         daskarr = daskarr.compute_chunk_sizes()
 
@@ -124,8 +124,8 @@ def linear_regression(x: pd.DataFrame, y: pd.DataFrame):
     Get linear regression using pandas and calculate the residuals of the predicted values
     """
     # Clean DataFrames of possible conflictive values
-    x = autoval.utils.clean_dataset(x)
-    y = autoval.utils.clean_dataset(y)
+    x = avocado.utils.clean_dataset(x)
+    y = avocado.utils.clean_dataset(y)
 
     # Get only the common data
     common_idx = list(set(x.index).intersection(y.index))

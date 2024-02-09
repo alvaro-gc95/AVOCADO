@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import seaborn as sns
 
-import autoval.climate
-from autoval.climate import Climatology
-import autoval.statistics
-import autoval.utils
+import avocado.climate
+from avocado.climate import Climatology
+import avocado.statistics
+import avocado.utils
 
 impossible_thresholds = {
     'TMPA': [-100, 100],
@@ -394,7 +394,7 @@ class AutomaticValidation:
         for month, monthly_training_dataset in daily_training_dataset.groupby(daily_training_dataset.index.month):
 
             # Get EOFs, PCAs and explained variance ratios
-            pca = autoval.statistics.DaskPCA(
+            pca = avocado.statistics.DaskPCA(
                 monthly_training_dataset,
                 n_components=n_components,
                 mode='T',
@@ -748,7 +748,7 @@ def get_significant_residuals(original: pd.DataFrame, reference: pd.DataFrame, c
     """
 
     regression, residuals = Climatology(original).spatial_regression(reference)
-    regression_series = autoval.climate.table_to_series(regression, original.index)
+    regression_series = avocado.climate.table_to_series(regression, original.index)
 
     correlation_columns = [c for c in regression_series.columns if 'correlation' in c]
 

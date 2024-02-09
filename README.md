@@ -43,17 +43,18 @@ All the tests add a column to the original pd.DataFrame. This columns indicatees
 Label values too big or too small to be physically possible. The labels are added in a column with the suffix '_IV'.
 
 ```python
-import autoval.utils
-import autoval.validation_tests
+import avocado.utils
+import avocado.validation_tests
 
 file_path = './data/station_name/'
 variables_to_validate = ['TMPA', 'WSDP', 'RADS01']
 
 # Open all data from a station
-observations = autoval.utils.open_observations(file_path, variables_to_validate)
+observations = avocado.utils.open_observations(file_path, variables_to_validate)
 
 # Validate
-observations = observations.AutoVal.impossible_values(variables_to_validate)`
+observations = observations.AutoVal.impossible_values(variables_to_validate)
+`
 ```
 
 **Climatological coherence**

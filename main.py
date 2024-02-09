@@ -4,8 +4,8 @@ Main program to do automatic validation of meteorological data
 Contact: alvaro@intermet.es
 """
 
-import autoval.validation_tests
-import autoval.utils as utils
+import avocado.validation_tests
+import avocado.utils as utils
 import matplotlib.pyplot as plt
 
 
